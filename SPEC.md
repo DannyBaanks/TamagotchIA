@@ -287,3 +287,20 @@ La demo debe cubrir el flujo completo del roadmap: crear, cuidar, jugar, cerrar,
 - proveedor remoto usado para la primera demo.
 
 Estas decisiones no deben romper los límites de dominio ni retrasar el vertical slice.
+
+## 16. Decisión 2026-09-24: PWA en el teléfono (reemplaza partes de §2, §3, §10)
+
+Decidido por Danny el 2026-09-24. Esta sección **se agrega**; lo de arriba queda como historia del diseño original.
+
+| Antes (§2, §3, §10) | Ahora | Por qué |
+|---|---|---|
+| "No incluye … móvil" | El objetivo principal es el teléfono, como PWA instalable | Danny quiere un companion de bolsillo |
+| Backend Python + FastAPI | Motor determinista en TypeScript, dentro del dispositivo | Un servidor Python no vive en un teléfono; con la PC apagada la criatura dejaría de existir |
+| SQLite | Guardado versionado en `localStorage` con copia de respaldo y registro de eventos | Es la persistencia disponible en una PWA sin servidor |
+| Keyring de Linux para las claves | La clave queda solo en el dispositivo, en un almacén aparte del save, y nunca se exporta | Una PWA no tiene keyring |
+
+Lo que **no** cambia: el motor es la única fuente de verdad, el `PersonalityProvider` no puede mutar el estado, todo funciona sin conexión y sin clave, los indicadores van de `0..100` y la UI solo pide comandos.
+
+Arte: la primera especie reutiliza los packs de Companion (MIT, ISyCo contributors), copiados de Companion `e7e8692` con sus hashes en `public/packs/SHA256SUMS`. Malbolgato usa sus GIFs animados; Shinji usa sus PNG estáticos con animación CSS, porque sus GIFs no están commiteados en Companion.
+
+Siguiente paso fuera de este alcance: envolver la PWA en un APK (Capacitor o Tauri 2) cuando el Android SDK esté instalado.
