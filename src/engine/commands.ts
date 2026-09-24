@@ -19,6 +19,9 @@ export type Command =
   | { id: string; kind: "explore" }
   | { id: string; kind: "minigame"; score: number };
 
+/** A command before it gets its id (Omit distributed over the union). */
+export type CommandInput = Command extends infer C ? (C extends Command ? Omit<C, "id"> : never) : never;
+
 export type RejectReason = "egg" | "asleep" | "awake" | "full" | "tired" | "not_tired" | "bad_input";
 
 export interface CommandResult {
