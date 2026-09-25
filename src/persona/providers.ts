@@ -75,6 +75,7 @@ export function httpProblem(status: number): string {
     403: "esa clave no tiene permiso para ese modelo",
     402: "a la cuenta no le quedan créditos",
     404: "ese modelo no existe en ese servicio (revisa el nombre)",
+    410: "ese modelo ya lo retiraron; elige otro",
     429: "se alcanzó el límite de uso por ahora; intenta más tarde",
   };
   return `${why[status] ?? (status >= 500 ? "el servicio está fallando ahora mismo" : "el servicio rechazó la petición")} (HTTP ${status})`;

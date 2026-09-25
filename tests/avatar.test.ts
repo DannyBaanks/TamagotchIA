@@ -49,7 +49,11 @@ describe("spec", () => {
     const grid = Array.from({ length: 16 }, () => row);
     const ok = { era: "8bit", palette: { a: "#000000" }, poses: { idle: [grid] } };
     expect(parseSpec(ok)).toMatchObject({ ok: true, spec: { kind: "pixeles" } });
-    expect(parseSpec({ ...ok, poses: { idle: [grid.slice(1)] } })).toMatchObject({ ok: false, error: { code: "BAD_GRID", field: "poses.idle[0]" } });
+    expect(parseSpec({ ...ok, poses: { idle: [grid.slice(4)] } })).toMatchObject({ ok: false, error: { code: "BAD_GRID", field: "poses.idle[0]" } });
+    expect(parseSpec({ ...ok, poses: { idle: [[...grid.slice(2), "a".repeat(20)]] } })).toMatchObject({ ok: false, error: { field: "poses.idle[0] fila 14" } });
+    // near misses (a model's usual miscount) are fixed and reported
+    const near = parseSpec({ ...ok, poses: { idle: [[...grid.slice(1).map((r, i) => (i === 3 ? r + "aa" : r))]] } });
+    expect(near).toMatchObject({ ok: true, warnings: ["poses.idle[0]: 15 filas ajustadas a 16", "poses.idle[0] fila 3: 18 caracteres ajustados a 16"] });
     const typo = [...grid]; typo[3] = "......x.........";
     expect(parseSpec({ ...ok, poses: { idle: [typo] } })).toMatchObject({ ok: false, error: { code: "BAD_GRID", field: "poses.idle[0] fila 3 columna 6", value: "x" } });
     expect(parseSpec({ ...ok, palette: { a: "#000000", b: "#111111", c: "#222222", d: "#333333", e: "#444444" } })).toMatchObject({ ok: false, error: { code: "TOO_MANY_COLORS" } });

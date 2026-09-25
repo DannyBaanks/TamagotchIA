@@ -121,7 +121,19 @@ Lo dibujó el motor con tus palabras · 16 bits · 14 colores · huella f01bb01c
 
 «Dibujo libre, pixel por pixel» es para modelos grandes: el modelo manda la cuadrícula completa y el motor revisa fila por fila (tamaño, caracteres, cuántos colores). Un error sale así: `poses.idle[0] fila 3 columna 6: «x» no está en la paleta`.
 
-**NO PROBADO:** con un modelo real, ni en modo por partes ni en dibujo libre (en esta máquina no hay una clave configurada). Tampoco en el iPhone ni en el APK: el aspecto se guarda aparte de la partida, así que **no viaja en el respaldo exportado**.
+**Con un modelo real** (NVIDIA directo, `google/gemma-4-31b-it`, 2026-09-25, desde Node y no desde el navegador):
+
+```text
+partes  16 bits  «un pajarito celeste con corona dorada y cachetes rosas»  ✓ a la primera (3.6 s)  huella cffe582c
+partes  8 bits   «un dragoncito morado feroz con cuernos»                  ✓ a la primera (3.4 s)  huella b284e82f
+pixeles 8 bits   «un fantasmita blanco»
+  Intento 1: ✗ poses.idle[0] fila 4 columna 4: « » no está en la paleta (usa ".", "a", "b", "c", "d")  (204 s)
+  Intento 2: ✓ el motor lo aceptó después de una corrección  (84 s)
+```
+
+Por partes, el modelo contestó lo mismo en dos corridas distintas, y salió la misma huella: misma receta, mismo sprite. En dibujo libre, el modelo **no sabe contar pixeles**: en otra corrida mandó filas de 18 y de 15 caracteres cuando tenían que ser 16. Por eso el motor arregla solo las filas que fallan por 1 o 2 (rellena con `.` o recorta, y lo avisa) y rechaza lo demás. El fantasma que dibujó salió sin cara: el dibujo libre tarda minutos y sale más feo que el modo por partes.
+
+**NO PROBADO:** dentro de la app en el iPhone o en el APK. En la página web NVIDIA no contesta (trampa 2); ahí usa OpenRouter. El aspecto se guarda aparte de la partida, así que **no viaja en el respaldo exportado**.
 
 | Ves | Significa | Qué hacer |
 |---|---|---|

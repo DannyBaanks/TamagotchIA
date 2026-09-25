@@ -102,6 +102,8 @@ export const PARTS_DEFAULTS: Omit<PartsSpec, "era"> = {
 };
 
 const MAX_FRAMES = 4;
+/** How far off a free drawing may be and still be fixed instead of rejected. */
+const SLACK = 2;
 
 function enumError(field: string, value: unknown, available: readonly string[]): SpecResult {
   return { ok: false, error: { code: "INVALID_ENUM", field, value, available: [...available], message: `«${String(value)}» no está en la lista de ${field}` } };
@@ -187,15 +189,25 @@ function parsePixels(o: Record<string, unknown>, era: EraId, warnings: string[])
     const kept: string[][] = [];
     for (const [f, rows] of frames.slice(0, MAX_FRAMES).entries()) {
       const where = `poses.${name}[${f}]`;
-      if (!Array.isArray(rows) || rows.length !== size) return bad("BAD_GRID", where, `se esperaban ${size} filas, hay ${Array.isArray(rows) ? rows.length : 0}`);
-      for (const [y, row] of rows.entries()) {
+      if (!Array.isArray(rows) || Math.abs(rows.length - size) > SLACK) return bad("BAD_GRID", where, `se esperaban ${size} filas, hay ${Array.isArray(rows) ? rows.length : 0}`);
+      // models miscount by a pixel or two all the time (measured: 18 and 15 for 16); a
+      // near miss is padded with "." or trimmed and reported, a real miss is rejected
+      if (rows.length !== size) warnings.push(`${where}: ${rows.length} filas ajustadas a ${size}`);
+      const fixed: string[] = [];
+      for (const [y, row] of rows.slice(0, size).entries()) {
         if (typeof row !== "string") return bad("BAD_GRID", `${where} fila ${y}`, "cada fila es un texto");
-        const cells = [...row];
-        if (cells.length !== size) return bad("BAD_GRID", `${where} fila ${y}`, `se esperaban ${size} caracteres, hay ${cells.length}`, row);
+        let cells = [...row];
+        if (Math.abs(cells.length - size) > SLACK) return bad("BAD_GRID", `${where} fila ${y}`, `se esperaban ${size} caracteres, hay ${cells.length}`, row);
+        if (cells.length !== size) {
+          warnings.push(`${where} fila ${y}: ${cells.length} caracteres ajustados a ${size}`);
+          cells = [...cells, ...".".repeat(size)].slice(0, size);
+        }
+        fixed.push(cells.join(""));
         const x = cells.findIndex((c) => c !== "." && !(c in palette));
         if (x >= 0) return bad("BAD_GRID", `${where} fila ${y} columna ${x}`, `«${cells[x]}» no está en la paleta (usa ".", ${Object.keys(palette).map((k) => `"${k}"`).join(", ")})`, cells[x]);
       }
-      kept.push(rows as string[]);
+      while (fixed.length < size) fixed.push(".".repeat(size));
+      kept.push(fixed);
     }
     poses[name as Pose] = kept;
   }
@@ -208,12 +220,12 @@ function parsePixels(o: Record<string, unknown>, era: EraId, warnings: string[])
 const WORDS: Array<[string, keyof PartsSpec, string]> = [
   ["gato", "body", "gato"], ["gatito", "body", "gato"], ["michi", "body", "gato"], ["felino", "body", "gato"],
   ["pajaro", "body", "pajaro"], ["pajarito", "body", "pajaro"], ["pollito", "body", "pajaro"], ["ave", "body", "pajaro"], ["buho", "body", "pajaro"],
-  ["dino", "body", "dino"], ["dinosaurio", "body", "dino"], ["dragon", "body", "dino"], ["lagartija", "body", "dino"],
+  ["dino", "body", "dino"], ["dinosaurio", "body", "dino"], ["dragon", "body", "dino"], ["dragoncito", "body", "dino"], ["dinosaurito", "body", "dino"], ["lagartija", "body", "dino"],
   ["redondo", "body", "redondo"], ["bolita", "body", "redondo"], ["gordito", "body", "redondo"],
-  ["gota", "body", "gota"], ["slime", "body", "gota"], ["blob", "body", "gota"], ["gelatina", "body", "gota"], ["fantasma", "body", "gota"],
+  ["gota", "body", "gota"], ["slime", "body", "gota"], ["blob", "body", "gota"], ["gelatina", "body", "gota"], ["fantasma", "body", "gota"], ["fantasmita", "body", "gota"], ["slimecito", "body", "gota"],
   ["alto", "body", "alto"], ["flaco", "body", "alto"], ["frijol", "body", "alto"],
   ["conejo", "ears", "conejo"], ["conejito", "ears", "conejo"], ["orejas de conejo", "ears", "conejo"], ["orejas largas", "ears", "conejo"],
-  ["oso", "ears", "oso"], ["osito", "ears", "oso"], ["orejas de oso", "ears", "oso"], ["orejas redondas", "ears", "oso"],
+  ["oso", "ears", "oso"], ["osito", "ears", "oso"], ["osita", "ears", "oso"], ["orejas de oso", "ears", "oso"], ["orejas redondas", "ears", "oso"],
   ["orejas de gato", "ears", "gato"], ["orejas puntiagudas", "ears", "gato"],
   ["cuernos", "ears", "cuernos"], ["cuernitos", "ears", "cuernos"], ["diablito", "ears", "cuernos"],
   ["antena", "ears", "antena"], ["antenas", "ears", "antena"], ["alien", "ears", "antena"], ["robot", "eyes", "visor"],
@@ -238,7 +250,7 @@ const WORDS: Array<[string, keyof PartsSpec, string]> = [
 ];
 
 const COLOR_WORDS: Record<string, string> = {
-  rojo: "rojo", roja: "rojo", naranja: "naranja", anaranjado: "naranja", anaranjada: "naranja", amarillo: "amarillo", amarilla: "amarillo",
+  rojo: "rojo", roja: "rojo", naranja: "naranja", anaranjado: "naranja", anaranjada: "naranja", amarillo: "amarillo", amarilla: "amarillo", dorado: "amarillo", dorada: "amarillo", oro: "amarillo",
   lima: "lima", verde: "verde", celeste: "celeste", cian: "celeste", azul: "azul", morado: "morado", morada: "morado", violeta: "morado",
   rosa: "rosa", rosado: "rosa", rosada: "rosa", cafe: "cafe", marron: "cafe", chocolate: "cafe", crema: "crema", beige: "crema",
   blanco: "blanco", blanca: "blanco", gris: "gris", plateado: "gris", negro: "negro", negra: "negro",

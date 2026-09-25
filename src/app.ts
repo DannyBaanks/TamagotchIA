@@ -700,7 +700,7 @@ export class App {
       log.replaceChildren();
       apply.disabled = true;
       const pixelMode = mode.value as DesignMode;
-      const timeout = pixelMode === "pixeles" ? 90_000 : Math.max(15_000, this.settings.timeoutMs * 2);
+      const timeout = pixelMode === "pixeles" ? 240_000 : Math.max(15_000, this.settings.timeoutMs * 2);
       const model = useModel ? new OpenAICompatibleProvider({ baseUrl: this.settings.baseUrl.trim(), model: this.settings.model.trim(), apiKey: loadSecret(this.store) }) : null;
       const d = await design(model, { description, era, mode: pixelMode, name: c.name }, timeout);
       candidate = d;
