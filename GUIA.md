@@ -166,6 +166,42 @@ Si alguna vez regeneras `android/` desde cero (`npx cap add android`), corre `py
 - **Con cable:** activa las opciones de desarrollador y la depuración USB en el teléfono, conéctalo y corre `~/Android/Sdk/platform-tools/adb install -r TamagotchIA-0.1.0-debug.apk`.
 - **Sin cable:** pasa el `.apk` al teléfono (Telegram a ti mismo, Drive, cable como almacenamiento), ábrelo y permite «instalar apps desconocidas» para esa app.
 
+## La app de iPhone (IPA)
+
+Xcode solo corre en una Mac, así que la IPA **se compila en una Mac de GitHub Actions** (igual que `applebridge-probe`) y **la firmas tú** con tu Apple ID al instalarla. Tiene lo mismo que el APK: avisos con la app cerrada y voz directa con NVIDIA.
+
+### Conseguirla
+
+Cada push a `main` que toque la app vuelve a compilarla. También se puede pedir a mano:
+
+```bash
+gh workflow run "iOS (IPA sin firmar)" -R DannyBaanks/TamagotchIA
+gh run download <run_id> -R DannyBaanks/TamagotchIA -n TamagotchIA-unsigned-ipa
+sha256sum -c SHA256SUMS      # si dice "no se encuentra out/…", compara el hash a mano: el runner lo calculó dentro de out/
+```
+
+Salida real de la primera compilación (run `36108125863`, 2026-09-25):
+
+```text
+Xcode 26.6
+Build version 17F113
+io.github.dannybaanks.tamagotchia
+0.1.0
+3528797fe218ff76f6598ff6fc587412688bfff5c0dd67eec9a33d5cd7c725d2  out/TamagotchIA-unsigned.ipa
+```
+
+La IPA pesa 5.8 MB, es arm64 y pide iOS 15 o más.
+
+### Instalarla en el iPhone
+
+**NO PROBADO** en un iPhone todavía. El camino es el mismo con el que ya instalaste la probe:
+
+1. Conecta el iPhone por cable y confía en la computadora.
+2. Abre **iloader** (tu fork iBridge, ya instalado en `~/.local/bin/iloader`) y entra con tu Apple ID. La contraseña la escribes tú, en iloader; no la guarda ningún archivo de este repo.
+3. Elige **Import IPA** y selecciona `TamagotchIA-unsigned.ipa`.
+4. En el iPhone: **Ajustes → General → VPN y administración de dispositivos**, toca tu Apple ID y dale **Confiar**.
+5. Abre TamagotchIA.
+
 ## Respaldo
 
 Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. **Importar** lo carga en otro teléfono. El archivo lleva un checksum, así que uno editado a mano se rechaza con «el checksum no coincide».
@@ -220,3 +256,6 @@ Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. 
 9. **El APK de prueba está firmado con la clave de depuración de esta computadora** (`~/.android/debug.keystore`). Android solo acepta una actualización si viene firmada con la misma clave: si esa clave se pierde o compilas en otra máquina, hay que desinstalar la app antes, y **se borra la partida**. Exporta un respaldo antes. Por lo mismo, Play Protect puede avisar «app desconocida»: es normal en un APK de prueba.
 
 10. **Los avisos de la app pueden llegar tarde.** Android 12 y posteriores piden permiso de «Alarmas y recordatorios» para avisar a la hora exacta; sin él, y con el ahorro de batería activo, Android puede agruparlos o retrasarlos. **NO PROBADO** en un teléfono físico.
+
+11. **Con un Apple ID gratuito la app dura 7 días.** Después deja de abrir hasta que la vuelvas a firmar con iloader (la partida no se borra al reinstalar encima). Además, una cuenta gratuita solo puede tener 3 apps firmadas a la vez; si ya tienes la probe y otras, quita una.
+12. **Si iloader rechaza el bundle id** `io.github.dannybaanks.tamagotchia` (porque ya está registrado en otra cuenta), deja que le cambie el id. La partida vive dentro de la app: con otro id, cuenta como otra app.
