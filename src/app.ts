@@ -469,12 +469,31 @@ export class App {
     const s = { ...this.settings };
     const enabled = h("input", { type: "checkbox", id: "p-on", ...(s.enabled ? { checked: true } : {}) }) as HTMLInputElement;
     const preset = h("select", { class: "field", },
-      h("option", { value: "" }, "Elegir proveedor…"), ...PRESETS.map((p) => h("option", { value: p.baseUrl }, p.label))) as HTMLSelectElement;
+      h("option", { value: "" }, "Elegir proveedor…"), ...PRESETS.map((p, i) => h("option", { value: String(i) }, p.label))) as HTMLSelectElement;
     const url = h("input", { class: "field", value: s.baseUrl, inputmode: "url", autocomplete: "off" }) as HTMLInputElement;
-    const model = h("input", { class: "field", value: s.model, placeholder: "p. ej. meta-llama/llama-3.1-8b-instruct", autocomplete: "off" }) as HTMLInputElement;
+    const model = h("input", { class: "field", value: s.model, placeholder: "p. ej. google/gemma-4-31b-it:free", autocomplete: "off" }) as HTMLInputElement;
     const key = h("input", { class: "field", type: "password", value: loadSecret(this.store), placeholder: "API key (opcional para modelos locales)", autocomplete: "off" }) as HTMLInputElement;
     const result = h("p", { class: "hint", "aria-live": "polite" });
-    preset.addEventListener("change", () => preset.value && (url.value = preset.value));
+    const presetNote = h("p", { class: "hint small", "aria-live": "polite" });
+    preset.addEventListener("change", () => {
+      const chosen = PRESETS[Number(preset.value)];
+      if (!chosen) return;
+      url.value = chosen.baseUrl;
+      if (chosen.model && !model.value.trim()) model.value = chosen.model;
+      presetNote.textContent = chosen.note;
+    });
+    // the most common mix-up: a free NVIDIA key pasted for OpenRouter, or the other way round
+    const keyNote = h("p", { class: "hint small", "aria-live": "polite" });
+    const checkKey = () => {
+      const k = key.value.trim();
+      const u = url.value;
+      keyNote.textContent =
+        k.startsWith("nvapi-") && !u.includes("nvidia.com") ? "Esa es una clave de NVIDIA (nvapi-). OpenRouter usa claves que empiezan con sk-or-." :
+        k.startsWith("sk-or-") && !u.includes("openrouter.ai") ? "Esa es una clave de OpenRouter (sk-or-); cambia el proveedor a OpenRouter." : "";
+    };
+    key.addEventListener("input", checkKey);
+    url.addEventListener("input", checkKey);
+    preset.addEventListener("change", checkKey);
 
     const commit = () => {
       this.settings = { enabled: enabled.checked, baseUrl: url.value.trim(), model: model.value.trim(), timeoutMs: s.timeoutMs };
@@ -485,6 +504,9 @@ export class App {
       commit();
       const w = this.world;
       if (!w) return;
+      if (!this.settings.enabled) return void (result.textContent = "Activa «Usar un modelo como su voz» para probarla.");
+      if (!this.settings.baseUrl) return void (result.textContent = "Elige un proveedor o escribe su URL.");
+      if (!this.settings.model) return void (result.textContent = "Escribe el nombre del modelo (por ejemplo, uno que termine en «:free»).");
       result.textContent = "Probando…";
       const event: GameEvent = w.events.at(-1) ?? { seq: 0, at: this.now(), kind: "TALKED", payload: {} };
       const n = await narrate(this.provider(), personaInput(w, { ...event, kind: "TALKED", payload: {} }, this.now(), "¡Hola! ¿Me escuchas?"), event.seq, this.settings.timeoutMs);
@@ -513,9 +535,11 @@ export class App {
       h("p", { class: "hint" }, "Un modelo puede ser la persona de tu criatura. El juego lo decide el motor; el modelo solo le pone palabras. Sin modelo, habla con su voz local."),
       h("label", { class: "switch" }, enabled, h("span", {}, "Usar un modelo como su voz")),
       h("label", { class: "field-label" }, "Proveedor", preset),
+      presetNote,
       h("label", { class: "field-label" }, "URL base (compatible con OpenAI)", url),
       h("label", { class: "field-label" }, "Modelo", model),
       h("label", { class: "field-label" }, "API key", key),
+      keyNote,
       h("p", { class: "hint small" }, "La clave se queda solo en este teléfono, separada de la partida: no se exporta ni se respalda."),
       h("div", { class: "row" },
         h("button", { class: "btn", type: "button", onclick: () => { commit(); this.toast("Guardado"); } }, "Guardar"),

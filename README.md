@@ -62,9 +62,25 @@ Cada uno tiene su propio cuarto, y el cielo cambia con la hora real: amanecer, d
 
 ## Dale una voz con IA (opcional)
 
-Sin configurar nada, tu criatura ya habla con frases propias. Pero si quieres que **improvise**, puedes conectar un modelo de inteligencia artificial y se vuelve su personalidad: le cuentas algo y te contesta como la criatura, no como un asistente.
+Sin configurar nada, tu criatura ya habla con frases propias. Pero si quieres que **improvise**, puedes conectarle una inteligencia artificial y se vuelve su personalidad: le cuentas algo y te contesta como la criatura, no como un asistente.
 
-En **Ajustes → La voz** eliges un servicio compatible (OpenRouter, NVIDIA, OpenAI, o un modelo en tu propia computadora con Ollama), pegas tu clave y pulsas **Probar la voz**.
+### Voz gratis en 3 minutos
+
+La forma más fácil y **sin pagar nada** es OpenRouter, que tiene modelos gratis, incluidos los Nemotron de NVIDIA:
+
+1. Entra a **[openrouter.ai](https://openrouter.ai)** y crea una cuenta (puedes entrar con Google o GitHub).
+2. En el menú de tu cuenta busca **Keys** y crea una clave nueva. Empieza con `sk-or-`. Cópiala.
+3. En TamagotchIA abre **Ajustes → La voz**:
+   - marca **Usar un modelo como su voz**;
+   - en **Proveedor** elige **OpenRouter (tiene modelos gratis)**: el modelo gratis se llena solo;
+   - pega tu clave en **API key**.
+4. Pulsa **Probar la voz**. Si ves **✓ Responde el modelo**, ya está.
+
+Los modelos gratis son los que terminan en **`:free`** y tienen un límite de uso diario. Si uno deja de funcionar, busca otro en [openrouter.ai/models](https://openrouter.ai/models) y escribe su nombre en **Modelo**.
+
+> **¿Y la clave gratis de NVIDIA (`nvapi-…`)?** Por ahora no funciona en la app web: el servidor de NVIDIA no deja que una página le hable directo (lo medimos: el navegador bloquea la respuesta). Los mismos modelos de NVIDIA están gratis en OpenRouter. Cuando exista la versión de app nativa, la clave `nvapi-` va a funcionar directo.
+
+Si ya pagas otro servicio compatible (OpenAI, por ejemplo) o tienes un modelo en tu computadora con Ollama, también sirve: elígelo en **Proveedor**.
 
 Dos cosas que nunca cambian:
 
@@ -116,7 +132,7 @@ Versión **0.1**, recién salida del huevo 🐣. Está probada en Chrome con tam
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # 54 tests: motor, voz, guardado y avisos
+npm test         # 55 tests: motor, voz, guardado y avisos
 npm run build    # la app completa en dist/
 ```
 

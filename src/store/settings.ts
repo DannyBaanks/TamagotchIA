@@ -21,12 +21,34 @@ export const DEFAULT_SETTINGS: PersonaSettings = {
   timeoutMs: 8000,
 };
 
-export const PRESETS: Array<{ label: string; baseUrl: string }> = [
-  { label: "OpenRouter", baseUrl: "https://openrouter.ai/api/v1" },
-  { label: "NVIDIA", baseUrl: "https://integrate.api.nvidia.com/v1" },
-  { label: "OpenAI", baseUrl: "https://api.openai.com/v1" },
-  { label: "Ollama (en este aparato)", baseUrl: "http://localhost:11434/v1" },
-  { label: "LM Studio (en este aparato)", baseUrl: "http://localhost:1234/v1" },
+export interface Preset {
+  label: string;
+  baseUrl: string;
+  /** Filled in when the model field is empty. */
+  model?: string;
+  note: string;
+}
+
+/**
+ * Browser reachability measured 2026-09-24 from https://dannybaanks.github.io:
+ * OpenRouter and OpenAI answer a web page; NVIDIA's API sends no CORS headers, so a
+ * browser can never read its replies. NVIDIA's free models are reachable via OpenRouter.
+ */
+export const PRESETS: Preset[] = [
+  {
+    label: "OpenRouter (tiene modelos gratis)",
+    baseUrl: "https://openrouter.ai/api/v1",
+    model: "google/gemma-4-31b-it:free",
+    note: "Gratis con cuenta: usa un modelo que termine en «:free». Ahí también están los Nemotron de NVIDIA.",
+  },
+  {
+    label: "NVIDIA directo (no funciona en el navegador)",
+    baseUrl: "https://integrate.api.nvidia.com/v1",
+    note: "El servidor de NVIDIA no deja que una página web le hable, así que tu clave nvapi- aquí no sirve. Usa los mismos modelos gratis por OpenRouter.",
+  },
+  { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", note: "De pago, con tu clave de OpenAI." },
+  { label: "Ollama (en este aparato)", baseUrl: "http://localhost:11434/v1", note: "Un modelo en este mismo aparato. En el celular, localhost es el celular." },
+  { label: "LM Studio (en este aparato)", baseUrl: "http://localhost:1234/v1", note: "Un modelo en este mismo aparato." },
 ];
 
 export function loadSettings(store: KeyValueStore): PersonaSettings {

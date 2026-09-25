@@ -101,6 +101,16 @@ describe("OpenAI-compatible transport", () => {
   it("an HTTP error becomes a fallback with the status, not a crash", async () => {
     const fake = (async () => new Response("nope", { status: 401 })) as unknown as typeof fetch;
     const provider = new OpenAICompatibleProvider({ baseUrl: "https://example.test/v1", model: "m", apiKey: "k" }, fake);
-    expect(await narrate(provider, input(), 1, 1000)).toMatchObject({ source: "fallback", problem: "HTTP 401" });
+    expect(await narrate(provider, input(), 1, 1000)).toMatchObject({ source: "fallback", problem: "la clave no es válida o está mal copiada (HTTP 401)" });
+  });
+});
+
+describe("errors a person can act on", () => {
+  it("explains a browser-blocked request instead of 'Failed to fetch'", async () => {
+    const blocked = (async () => { throw new TypeError("Failed to fetch"); }) as unknown as typeof fetch;
+    const provider = new OpenAICompatibleProvider({ baseUrl: "https://integrate.api.nvidia.com/v1", model: "m", apiKey: "nvapi-x" }, blocked);
+    const n = await narrate(provider, input(), 1, 1000);
+    expect(n.source).toBe("fallback");
+    expect(n.problem).toContain("CORS");
   });
 });

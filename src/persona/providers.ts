@@ -41,12 +41,24 @@ export class OpenAICompatibleProvider implements PersonalityProvider {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.config.apiKey) headers.Authorization = `Bearer ${this.config.apiKey}`;
     const res = await this.fetcher(url, { method: "POST", headers, body: this.body(input), signal });
-    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    if (!res.ok) throw new Error(httpProblem(res.status));
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
     const content = data.choices?.[0]?.message?.content;
     if (typeof content !== "string") throw new Error("respuesta sin choices[0].message.content");
     return content;
   }
+}
+
+/** An HTTP status in words a player can act on; the code stays at the end for support. */
+export function httpProblem(status: number): string {
+  const why: Record<number, string> = {
+    401: "la clave no es válida o está mal copiada",
+    403: "esa clave no tiene permiso para ese modelo",
+    402: "a la cuenta no le quedan créditos",
+    404: "ese modelo no existe en ese servicio (revisa el nombre)",
+    429: "se alcanzó el límite de uso por ahora; intenta más tarde",
+  };
+  return `${why[status] ?? (status >= 500 ? "el servicio está fallando ahora mismo" : "el servicio rechazó la petición")} (HTTP ${status})`;
 }
 
 /** Test double: answers whatever it was given, in order. */
@@ -87,7 +99,12 @@ export async function narrate(
     return { reply: fallbackReply(input, seq), source: "fallback", problem: `respuesta inválida: ${checked.error}`, latencyMs: clock() - started };
   } catch (error) {
     const aborted = controller.signal.aborted;
-    const message = aborted ? `sin respuesta en ${timeoutMs} ms` : error instanceof Error ? error.message : String(error);
+    // fetch() throws a bare TypeError when the browser refuses to read the reply (no CORS) or
+    // there is no network at all; neither says so, so translate it into something actionable
+    const blocked = error instanceof TypeError;
+    const message = aborted ? `sin respuesta en ${timeoutMs} ms`
+      : blocked ? "el servicio no le contestó a esta página: sin internet, o no acepta apps web (CORS)"
+      : error instanceof Error ? error.message : String(error);
     return { reply: fallbackReply(input, seq), source: "fallback", problem: message, latencyMs: null };
   } finally {
     clearTimeout(timer);

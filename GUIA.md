@@ -137,7 +137,29 @@ Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. 
 
    Se puede jugar y la partida se guarda, pero para **instalarla en el teléfono** necesita HTTPS. El camino más corto es publicar `dist/` en GitHub Pages.
 
-2. **Muchos proveedores no dejan que un navegador les hable directo (CORS).** Si «Probar la voz» dice `Failed to fetch`, el problema casi nunca es tu clave: es que ese endpoint no acepta peticiones desde una página web. OpenRouter sí las acepta. Con Ollama hay que arrancarlo permitiendo el origen de la app (`OLLAMA_ORIGINS`). **NO PROBADO** con cada proveedor.
+2. **No todos los proveedores le contestan a una página web (CORS).** Medido el 2026-09-24 desde `https://dannybaanks.github.io`, con una clave falsa:
+
+   ```json
+   {
+    "nvidia": "bloqueado: TypeError: Failed to fetch",
+    "openrouter": "respuesta HTTP 401 (el navegador SÍ pudo leerla)",
+    "openai": "respuesta HTTP 401 (el navegador SÍ pudo leerla)"
+   }
+   ```
+
+   **NVIDIA directo (`nvapi-…`) no funciona en la app web.** Su servidor no manda los encabezados CORS, así que el navegador bloquea la respuesta aunque la clave sea buena. En la app sale así:
+
+   ```text
+   Usó la voz local porque: el servicio no le contestó a esta página: sin internet, o no acepta apps web (CORS).
+   ```
+
+   Los modelos de NVIDIA están gratis en OpenRouter (`nvidia/nemotron-…:free`). Con una clave mal copiada, OpenRouter responde así:
+
+   ```text
+   Usó la voz local porque: la clave no es válida o está mal copiada (HTTP 401).
+   ```
+
+   **NO PROBADO** con una clave real: el modelo sugerido `google/gemma-4-31b-it:free` sale de la lista pública de OpenRouter del 2026-09-24, pero nadie lo ha probado todavía con TamagotchIA. Con Ollama hay que arrancarlo permitiendo el origen de la app (`OLLAMA_ORIGINS`).
 
 3. **«Ollama (en este aparato)» en el teléfono apunta al teléfono.** `localhost` siempre es el aparato donde está abierta la app. Para usar el Ollama de tu PC desde el celular, pon la IP de la PC (`http://192.168.1.102:11434/v1`), y recuerda la trampa 2.
 
