@@ -1,6 +1,6 @@
 /* TamagotchIA service worker: keeps the app shell and the art available offline.
  * Same-origin GETs only. Calls to a model endpoint are other origins and are never cached. */
-const CACHE = "tamagotchia-v3";
+const CACHE = "tamagotchia-v4";
 const POSES = ["idle", "thinking", "working", "success", "error", "waiting"];
 // every pose of every species, so a state never seen online still shows offline
 const ART = [...POSES.map((p) => `./packs/malbolge-cat/${p}.gif`), ...POSES.map((p) => `./packs/tabby-shinji-cat/${p}.png`)];
