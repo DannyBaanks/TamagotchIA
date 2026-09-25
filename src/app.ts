@@ -24,8 +24,14 @@ import { askPermission, loadPrefs, loadState, savePrefs, saveState, show, suppor
 import { $, buzz, formatAge, h } from "./ui/dom";
 import { ATTENTION, FOOD_LABEL, MEMORY_ICON, STAGE_LABEL, clockLabel, dayLabel, describeEvent } from "./ui/labels";
 import { playMiniGame } from "./ui/minigame";
+import { design, type Design, type DesignMode } from "./avatar/designer";
+import { rasterize, type AvatarImages } from "./avatar/raster";
+import { compile, fingerprint } from "./avatar/render";
+import { ERAS, ERA_IDS, POSES, type EraId } from "./avatar/spec";
+import { loadAvatar, saveAvatar, type SavedAvatar } from "./avatar/store";
 
 const DEBUG_KEY = "tamagotchia.debug.v1";
+const POSE_LABEL: Record<Pose, string> = { idle: "normal", thinking: "pensando", working: "jugando", success: "feliz", error: "triste", waiting: "dormido" };
 const SAVE_EVERY_TICKS = 15;
 /** Events worth a spontaneous line, most important first. */
 const AUTO_NARRATE: EventKind[] = ["EVOLVED", "HATCHED", "BECAME_SICK", "RECOVERED", "LONG_ABSENCE", "FAVORITE_FOUND", "WOKE_UP", "WENT_TO_SLEEP"];
@@ -49,11 +55,14 @@ export class App {
   private thinking = false;
   private narrationToken = 0;
   private lastNarration: Narration | null = null;
-  private stopMiniGame: (() => void) | null = null;
+  private onSheetClose: (() => void) | null = null;
   private seqSeen = 0;
   private notifyPrefs: NotifyPrefs;
   private preloadedSpecies: string | null = null;
   private notifyState: NotifyState;
+  /** A look designed with the avatar compiler; null = the species' GIF. */
+  private avatar: SavedAvatar | null;
+  private avatarImages: AvatarImages | null = null;
 
   constructor(private readonly root: HTMLElement) {
     const { store, persistent } = browserStore();
@@ -63,6 +72,36 @@ export class App {
     this.debug = this.loadDebug();
     this.notifyPrefs = loadPrefs(store);
     this.notifyState = loadState(store);
+    this.avatar = loadAvatar(store);
+  }
+
+  private setAvatar(avatar: SavedAvatar | null): void {
+    this.avatar = avatar;
+    saveAvatar(this.store, avatar);
+    this.avatarImages = null;
+    this.renderAvatar();
+    this.update();
+  }
+
+  private renderAvatar(): void {
+    if (!this.avatar || this.avatarImages) return;
+    try {
+      this.avatarImages = rasterize(compile(this.avatar.spec));
+    } catch (error) {
+      this.avatarImages = null;
+      this.toast(`No pude dibujar su aspecto (${error instanceof Error ? error.message : String(error)}); vuelve el GIF.`);
+    }
+  }
+
+  /** Pixel avatars animate by swapping frames; only the <img> is touched. */
+  private animateAvatar(): void {
+    const sprite = this.root.querySelector<HTMLImageElement>(".game .sprite");
+    const c = this.world?.creature;
+    if (!sprite || !c || !this.avatarImages) return;
+    const current = this.thinking ? "thinking" : basePose(c, this.transient?.pose ?? null);
+    const { frames, fps } = this.avatarImages.poses[current];
+    const src = frames[Math.floor((Date.now() * fps) / 1000) % frames.length]!;
+    if (sprite.getAttribute("src") !== src) sprite.setAttribute("src", src);
   }
 
   // ---------------------------------------------------------------- time
@@ -83,7 +122,9 @@ export class App {
       if (loaded.problem) this.toast(`La partida guardada estaba dañada (${loaded.problem}). Empecemos de nuevo.`);
     }
     if (!this.persistent) this.toast("Este navegador no deja guardar: la partida se perderá al cerrar.");
+    this.renderAvatar();
     setInterval(() => this.tick(), 1000);
+    setInterval(() => this.animateAvatar(), 125);
     const flush = () => this.persist();
     document.addEventListener("visibilitychange", () => {
       if (document.visibilityState !== "hidden") return;
@@ -337,7 +378,9 @@ export class App {
 
     const hour = new Date(this.now()).getHours();
     const tod = hour < 6 || hour >= 21 ? "night" : hour < 9 ? "dawn" : hour < 18 ? "day" : "dusk";
-    Object.assign(game.dataset, { habitat: species.habitat, tod, stage: c.stage, asleep: String(c.asleep), sick: String(c.sick), animated: String(species.animated) });
+    const pixel = this.avatarImages !== null;
+    Object.assign(game.dataset, { habitat: species.habitat, tod, stage: c.stage, asleep: String(c.asleep), sick: String(c.sick),
+      animated: String(pixel || species.animated), pixel: pixel ? (this.avatar?.spec.era ?? "8bit") : "" });
     game.style.setProperty("--accent", species.accent);
 
     $(game, ".name").textContent = c.name;
@@ -358,8 +401,11 @@ export class App {
 
     const sprite = $(game, ".sprite") as HTMLImageElement;
     const current = this.thinking ? "thinking" : basePose(c, this.transient?.pose ?? null);
-    const src = species.sprite(current);
-    if (!sprite.src.endsWith(src.replace(/^\.\//, ""))) sprite.src = src;
+    if (pixel) this.animateAvatar();
+    else {
+      const src = species.sprite(current);
+      if (!sprite.src.endsWith(src.replace(/^\.\//, ""))) sprite.src = src;
+    }
     sprite.alt = `${c.name}, ${STAGE_LABEL[c.stage]}`;
 
     const bubble = $(game, ".bubble");
@@ -398,8 +444,8 @@ export class App {
   private sheet(title: string, ...content: Array<Node | string>): HTMLElement {
     const host = $(this.root, ".sheet-host");
     const close = () => {
-      this.stopMiniGame?.();
-      this.stopMiniGame = null;
+      this.onSheetClose?.();
+      this.onSheetClose = null;
       host.replaceChildren();
     };
     const panel = h("section", { class: "sheet", role: "dialog", "aria-modal": "true", "aria-label": title },
@@ -411,8 +457,8 @@ export class App {
   }
 
   private closeSheet(): void {
-    this.stopMiniGame?.();
-    this.stopMiniGame = null;
+    this.onSheetClose?.();
+    this.onSheetClose = null;
     this.root.querySelector(".sheet-host")?.replaceChildren();
   }
 
@@ -454,6 +500,7 @@ export class App {
                    : this.option("🌙", "Dormir", "recupera energía", run({ kind: "sleep" })),
           this.option("🧭", "Explorar", "sale a buscar tesoritos", run({ kind: "explore" })),
           this.option("📔", "Diario", "recuerdos y lo que ha pasado", () => this.openDiary()),
+          this.option("🎨", "Su aspecto", "pixel art 8 bits, 16 bits o LCD", () => this.openLook()),
           this.option("⚙️", "Ajustes", "voz, respaldo y más", () => this.openSettings()));
         break;
     }
@@ -469,7 +516,7 @@ export class App {
     }
     const host = h("div");
     this.sheet("Minijuego", host);
-    this.stopMiniGame = playMiniGame(host, (score) => {
+    this.onSheetClose = playMiniGame(host, (score) => {
       this.closeSheet();
       this.dispatch({ kind: "minigame", score });
     });
@@ -575,6 +622,8 @@ export class App {
     });
 
     this.sheet("Ajustes",
+      h("h3", {}, "Su aspecto"),
+      h("button", { class: "btn", type: "button", onclick: () => this.openLook() }, "🎨 Cambiar su aspecto (pixel art)"),
       h("h3", {}, "La voz"),
       h("p", { class: "hint" }, "Un modelo puede ser la persona de tu criatura. El juego lo decide el motor; el modelo solo le pone palabras. Sin modelo, habla con su voz local."),
       h("label", { class: "switch" }, enabled, h("span", {}, "Usar un modelo como su voz")),
@@ -599,6 +648,96 @@ export class App {
       h("h3", {}, "Desarrollo"),
       h("button", { class: "btn", type: "button", onclick: () => this.openDebug() }, "Abrir panel debug"),
       h("p", { class: "hint small" }, "TamagotchIA 0.1 · arte de Companion (MIT)"));
+  }
+
+  // ---------------------------------------------------------------- look
+  /** The model (or the player's words) designs; the compiler draws; the player decides. */
+  private openLook(): void {
+    const c = this.world?.creature;
+    if (!c) return;
+    let era: EraId = this.avatar?.spec.era ?? "8bit";
+    let candidate: Design | null = null;
+    let images: AvatarImages | null = null;
+    const eraButtons = ERA_IDS.map((id) => h("button", { class: "era-card", type: "button", "aria-pressed": String(id === era),
+      onclick: () => { era = id; eraButtons.forEach((b, i) => b.setAttribute("aria-pressed", String(ERA_IDS[i] === era))); } },
+      h("strong", {}, ERAS[id].label), h("span", {}, ERAS[id].blurb)));
+    const text = h("textarea", { class: "field", rows: 3, maxlength: 400, placeholder: "p. ej. un gatito naranja con orejas de conejo, pancita crema y moño rojo" }) as HTMLTextAreaElement;
+    text.value = this.avatar?.prompt ?? "";
+    const mode = h("select", { class: "field" },
+      h("option", { value: "partes" }, "Por partes (cualquier modelo, hasta los chiquitos)"),
+      h("option", { value: "pixeles" }, "Dibujo libre, pixel por pixel (modelos grandes, tarda)")) as HTMLSelectElement;
+    const hasModel = this.settings.enabled && Boolean(this.settings.model.trim() && this.settings.baseUrl.trim());
+    const preview = h("div", { class: "look-preview", "data-era": era });
+    const status = h("p", { class: "hint", "aria-live": "polite" });
+    const log = h("ol", { class: "look-log hint small" });
+    const apply = h("button", { class: "btn primary", type: "button", disabled: true, onclick: () => {
+      if (!candidate) return;
+      this.setAvatar({ spec: candidate.spec, author: candidate.source === "model" ? this.settings.model : "tus palabras", prompt: text.value.trim(), savedAt: this.now() });
+      this.closeSheet();
+      this.toast(`${c.name} estrena look ✨`);
+    } }, "Ponérselo") as HTMLButtonElement;
+
+    let timer: ReturnType<typeof setInterval> | null = null;
+    const show = () => {
+      if (timer) clearInterval(timer);
+      preview.dataset.era = candidate?.spec.era ?? era;
+      if (!images) return void preview.replaceChildren();
+      const imgs = POSES.map((p) => h("img", { alt: p, draggable: "false" }) as HTMLImageElement);
+      preview.replaceChildren(...imgs.map((img, i) => h("figure", {}, img, h("figcaption", {}, POSE_LABEL[POSES[i]!]))));
+      const tick = () => imgs.forEach((img, i) => {
+        const { frames, fps } = images!.poses[POSES[i]!];
+        img.src = frames[Math.floor((Date.now() * fps) / 1000) % frames.length]!;
+      });
+      tick();
+      timer = setInterval(tick, 125);
+    };
+    this.onSheetClose = () => { if (timer) clearInterval(timer); };
+
+    const run = async (useModel: boolean) => {
+      const description = text.value.trim();
+      if (!description) return void (status.textContent = "Descríbelo primero: cómo es, de qué color, qué trae puesto.");
+      status.textContent = useModel ? "El modelo está diseñando… el motor revisa cada respuesta." : "Dibujando…";
+      log.replaceChildren();
+      apply.disabled = true;
+      const pixelMode = mode.value as DesignMode;
+      const timeout = pixelMode === "pixeles" ? 90_000 : Math.max(15_000, this.settings.timeoutMs * 2);
+      const model = useModel ? new OpenAICompatibleProvider({ baseUrl: this.settings.baseUrl.trim(), model: this.settings.model.trim(), apiKey: loadSecret(this.store) }) : null;
+      const d = await design(model, { description, era, mode: pixelMode, name: c.name }, timeout);
+      candidate = d;
+      try {
+        const sprite = compile(d.spec);
+        images = rasterize(sprite);
+        const who = d.source === "model" ? `Lo diseñó ${this.settings.model}` : useModel ? "El modelo no pudo; lo dibujó el motor con tus palabras" : "Lo dibujó el motor con tus palabras";
+        status.textContent = `${who} · ${ERAS[d.spec.era].label} · ${sprite.colors.length - 1} colores · huella ${fingerprint(sprite)}${d.problem ? ` · porque: ${d.problem}` : ""}`;
+        apply.disabled = false;
+      } catch (error) {
+        images = null;
+        status.textContent = `No pude dibujarlo: ${error instanceof Error ? error.message : String(error)}`;
+      }
+      log.replaceChildren(...d.attempts.map((a, i) => h("li", {}, `Intento ${i + 1}: ${a.ok ? "✓" : "✗"} ${a.note}${a.latencyMs ? ` (${(a.latencyMs / 1000).toFixed(1)} s)` : ""}`)),
+        ...d.warnings.map((w) => h("li", {}, `Aviso: ${w}`)));
+      show();
+    };
+
+    if (this.avatar) {
+      candidate = { spec: this.avatar.spec, source: "words", attempts: [], warnings: [], problem: null };
+      images = this.avatarImages;
+      status.textContent = `Ahora: ${ERAS[this.avatar.spec.era].label}, por ${this.avatar.author || "ti"}.`;
+    }
+
+    this.sheet("Su aspecto",
+      h("p", { class: "hint" }, "El GIF es solo el de fábrica. Descríbelo y el motor lo dibuja en pixel art; si tienes un modelo, él lo diseña y el motor revisa que se pueda dibujar."),
+      h("div", { class: "era-grid" }, ...eraButtons),
+      h("label", { class: "field-label" }, "¿Cómo es?", text),
+      h("label", { class: "field-label" }, "Cómo lo hace el modelo", mode),
+      h("div", { class: "row wrap" },
+        h("button", { class: "btn", type: "button", onclick: () => void run(false) }, "Dibujar con mis palabras"),
+        h("button", { class: "btn primary", type: "button", disabled: !hasModel, onclick: () => void run(true) }, "Que el modelo lo diseñe")),
+      hasModel ? "" : h("p", { class: "hint small" }, "Para que lo diseñe un modelo, primero configura «La voz» en Ajustes (sirve el mismo)."),
+      preview, status, log,
+      h("div", { class: "row wrap" }, apply,
+        this.avatar ? h("button", { class: "btn", type: "button", onclick: () => { this.setAvatar(null); this.closeSheet(); this.toast("Volvió el GIF de fábrica."); } }, "Volver al GIF") : null));
+    show();
   }
 
   private alertSettings(): Node[] {

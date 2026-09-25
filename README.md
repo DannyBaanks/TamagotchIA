@@ -87,6 +87,14 @@ Dos cosas que nunca cambian:
 - **La IA no puede hacer trampa.** Solo le pone palabras. El hambre, la salud y el crecimiento los decide el juego, y si la IA dice algo raro, se ignora.
 - **Tu clave se queda en tu teléfono.** Solo viaja al servicio de IA que elegiste; no se guarda en la partida ni sale en los respaldos.
 
+## Hazle su propio pixel art
+
+El GIF es solo el de fábrica. En **Más → Su aspecto** eliges una era (**LCD** como el llavero de 1996, **8 bits** o **16 bits**), lo describes con tus palabras («un pajarito celeste con corona») y aparece dibujado en pixel art, con sus 6 poses animadas.
+
+<p align="center"><img src="docs/img/pixel-eras.png" alt="Un pajarito en 16 bits en sus seis poses" width="100%"></p>
+
+Si le pusiste una IA, también puede diseñarlo ella. Pero **la IA nunca pinta un pixel**: solo elige piezas de listas cerradas (cuerpo, orejas, ojos, cola, accesorio, colores) y el motor del juego las dibuja. Así hasta un modelo chiquito lo logra: si elige algo que no existe, el motor le dice qué sí se vale y le da otra oportunidad. Los modelos grandes pueden dibujarlo pixel por pixel, y el motor revisa cada fila.
+
 ## Te avisa cuando te necesita
 
 Activa los avisos en **Ajustes → Avisos** y te dice cuándo tiene hambre, se enfermó, se quedó sin energía o despertó. Viene con **horas de silencio** (de 10 de la noche a 8 de la mañana), para que no te despierte a las 3 a.m.; lo que pase de noche te lo cuenta en la mañana. También puedes ver a qué hora te va a necesitar si no haces nada.
@@ -138,6 +146,7 @@ npm run build    # la app completa en dist/
 
 - **Motor determinista** (`src/engine/`): funciones puras con el reloj inyectado. La simulación avanza en pasos de 5 minutos con tope de 72 horas, y el pronóstico de necesidades alimenta los avisos.
 - **Contrato de la voz** (`src/persona/`): el modelo recibe un resumen acotado y debe responder un JSON (de 3 a 20 palabras, emoción, intención y animación de listas cerradas). Si no, habla la voz local.
+- **Avatares en pixel art** (`src/avatar/`): la especificación `criatura/1` (catálogos cerrados, o una cuadrícula libre validada celda por celda) se compila de forma determinista en cuadros por pose. Es la misma idea del motor de avatares de Munder: el modelo traduce la intención a una especificación y el compilador pinta.
 - **Guardado** (`src/store/`): con checksum y respaldo automático; la clave va aparte.
 - **PWA** (`public/sw.js`): funciona offline con todas las poses precargadas.
 

@@ -400,3 +400,25 @@ select.field { appearance: none; }
 }
 
 .field-label { display: flex; flex-direction: column; gap: 6px; font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+
+/* ------------------------------------------------------------------ pixel avatars */
+.game[data-pixel]:not([data-pixel=""]) .sprite { image-rendering: pixelated; object-position: 50% 100%; }
+.game[data-pixel="lcd"] .sprite { border-radius: 14px; box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.25); filter: none; }
+.game[data-pixel="lcd"][data-sick="true"] .sprite { filter: none; }
+.era-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.era-card {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 8px; border-radius: 14px; text-align: center;
+  background: transparent; color: var(--ink); border: 2px solid var(--line); font: inherit;
+}
+.era-card strong { font-size: 0.95rem; }
+.era-card span { font-size: 0.72rem; color: var(--muted); line-height: 1.3; }
+.era-card[aria-pressed="true"] { border-color: var(--accent); background: rgba(127, 127, 127, 0.12); }
+.look-preview { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.look-preview:empty { display: none; }
+.look-preview figure { margin: 0; display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 6px; border-radius: 12px; background: rgba(127, 127, 127, 0.12); }
+.look-preview img { width: 100%; max-width: 96px; aspect-ratio: 1; image-rendering: pixelated; }
+.look-preview[data-era="lcd"] img { border-radius: 8px; }
+.look-preview figcaption { font-size: 0.72rem; color: var(--muted); }
+.look-log { margin: 0; padding-left: 18px; }
+.look-log:empty { display: none; }
+textarea.field { resize: vertical; min-height: 64px; font: inherit; }

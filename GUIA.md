@@ -20,14 +20,11 @@ Abre `http://localhost:5173/` en el navegador. Para verlo como en el teléfono, 
 
 ```console
 $ npm test
- ✓ tests/store.test.ts (7 tests) 6ms
- ✓ tests/notify.test.ts (13 tests) 27ms
- ✓ tests/persona.test.ts (17 tests) 43ms
- ✓ tests/engine.test.ts (17 tests) 164ms
- Test Files  4 passed (4)
-      Tests  54 passed (54)
-   Start at  18:13:54
-   Duration  547ms (transform 233ms, setup 0ms, collect 375ms, tests 239ms, environment 1ms, prepare 227ms)
+ RUN  v4.1.11 …/TamagotchIA
+ Test Files  5 passed (5)
+      Tests  75 passed (75)
+   Start at  05:40:54
+   Duration  1.24s (transform 482ms, setup 0ms, import 623ms, tests 1.31s, environment 0ms)
 ```
 
 ### Levantar la app para desarrollar
@@ -96,6 +93,42 @@ Probado el 24 de septiembre de 2026 contra un endpoint local de prueba que habla
 ```
 
 **NO PROBADO** con un proveedor real (OpenRouter, NVIDIA, OpenAI, Ollama): en esta máquina no había clave configurada ni modelo local descargado. Lo que sí quedó comprobado es que la clave viaja solo en el header `Authorization`, nunca en el cuerpo de la petición ni en el save.
+
+## Su aspecto: pixel art (8 bits, 16 bits, LCD)
+
+El GIF es solo el aspecto de fábrica. **Más → Su aspecto** (o Ajustes → «Cambiar su aspecto»):
+
+1. Elige la era: **Pantallita LCD** (16×16, un solo tono, como el llavero de 1996), **8 bits** (16×16, 4 tonos) o **16 bits** (32×32, sombras y brillos, hasta 15 colores).
+2. Escribe cómo es: «un gatito naranja con orejas de conejo, pancita crema y moño rojo».
+3. **Dibujar con mis palabras** funciona sin modelo ni internet. **Que el modelo lo diseñe** usa el mismo modelo de «La voz».
+4. Revisa las 6 poses en la vista previa y pulsa **Ponérselo**. **Volver al GIF** lo deshace.
+
+**La regla de oro: el modelo nunca pinta un pixel.** Igual que el motor de avatares de Munder: el modelo solo elige piezas de listas cerradas (cuerpo, orejas, ojos, boca, cola, marcas, accesorio y colores) y el compilador (`src/avatar/render.ts`) las dibuja. La misma receta da siempre el mismo sprite; la «huella» que sale abajo lo demuestra. Por eso hasta un modelo chiquito puede diseñarlo. Si se equivoca, el motor le devuelve el error exacto con la lista de valores válidos y le da **una** oportunidad más. Si vuelve a fallar, lo dibuja con tus palabras.
+
+Probado el 2026-09-25 en Chrome sin ventana, con un modelo falso que a propósito contesta mal la primera vez (`"ears":"alas"`):
+
+```text
+Lo diseñó fake-weak-model · 8 bits · 4 colores · huella 7dd63c1e
+Intento 1: ✗ ears: «alas» no está en la lista de ears (se vale: ninguna, gato, conejo, oso, cuernos, antena) (0.0 s)
+Intento 2: ✓ el motor lo aceptó después de una corrección (0.0 s)
+```
+
+Con tus palabras, en 16 bits:
+
+```text
+Lo dibujó el motor con tus palabras · 16 bits · 14 colores · huella f01bb01c
+```
+
+«Dibujo libre, pixel por pixel» es para modelos grandes: el modelo manda la cuadrícula completa y el motor revisa fila por fila (tamaño, caracteres, cuántos colores). Un error sale así: `poses.idle[0] fila 3 columna 6: «x» no está en la paleta`.
+
+**NO PROBADO:** con un modelo real, ni en modo por partes ni en dibujo libre (en esta máquina no hay una clave configurada). Tampoco en el iPhone ni en el APK: el aspecto se guarda aparte de la partida, así que **no viaja en el respaldo exportado**.
+
+| Ves | Significa | Qué hacer |
+|---|---|---|
+| `Lo diseñó <modelo>` | El modelo lo diseñó y el motor lo aceptó | Nada |
+| `El modelo no pudo; lo dibujó el motor con tus palabras · porque: …` | Dos respuestas inválidas, o un error de red | Lee el «porque»; los intentos salen abajo |
+| `Aviso: no reconocí ninguna palabra` | Nada de lo que escribiste está en el catálogo | Usa palabras como gato, conejo, dino, pajarito, moño, corona, manchas, rayas |
+| Botón «Que el modelo lo diseñe» apagado | No hay modelo en «La voz» | Configúralo en Ajustes |
 
 ## Avisos
 
@@ -259,3 +292,4 @@ Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. 
 
 11. **Con un Apple ID gratuito la app dura 7 días.** Después deja de abrir hasta que la vuelvas a firmar con iloader. Reinstalar encima con la misma cuenta normalmente conserva la partida (NO PROBADO): exporta un respaldo antes por si acaso. Además, una cuenta gratuita solo puede tener 3 apps firmadas a la vez; si ya tienes la probe y otras, quita una.
 12. **Si iloader rechaza el bundle id** `io.github.dannybaanks.tamagotchia` (porque ya está registrado en otra cuenta), deja que le cambie el id. La partida vive dentro de la app: con otro id, cuenta como otra app.
+13. **El aspecto en pixel art no viaja en el respaldo.** Se guarda aparte de la partida para no cambiar el formato del save. Si importas un respaldo en otro teléfono, vuelve a describirlo (la misma descripción y la misma era dan el mismo sprite).

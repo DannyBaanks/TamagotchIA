@@ -17,7 +17,18 @@ export interface OpenAICompatibleConfig {
   apiKey: string;
 }
 
-export class OpenAICompatibleProvider implements PersonalityProvider {
+export interface ChatMessage {
+  role: "system" | "user" | "assistant";
+  content: string;
+}
+
+/** Anything that can answer a chat: the avatar designer only needs this. */
+export interface ChatModel {
+  readonly name: string;
+  chat(messages: ChatMessage[], options: { temperature: number; maxTokens: number }, signal: AbortSignal): Promise<string>;
+}
+
+export class OpenAICompatibleProvider implements PersonalityProvider, ChatModel {
   readonly name: string;
   constructor(private readonly config: OpenAICompatibleConfig, private readonly fetcher: typeof fetch = fetch.bind(globalThis)) {
     this.name = config.model || "modelo";
@@ -37,10 +48,18 @@ export class OpenAICompatibleProvider implements PersonalityProvider {
   }
 
   async react(input: PersonaInput, signal: AbortSignal): Promise<string> {
+    return this.send(this.body(input), signal);
+  }
+
+  async chat(messages: ChatMessage[], options: { temperature: number; maxTokens: number }, signal: AbortSignal): Promise<string> {
+    return this.send(JSON.stringify({ model: this.config.model, temperature: options.temperature, max_tokens: options.maxTokens, messages }), signal);
+  }
+
+  private async send(body: string, signal: AbortSignal): Promise<string> {
     const url = `${this.config.baseUrl.replace(/\/+$/, "")}/chat/completions`;
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (this.config.apiKey) headers.Authorization = `Bearer ${this.config.apiKey}`;
-    const res = await this.fetcher(url, { method: "POST", headers, body: this.body(input), signal });
+    const res = await this.fetcher(url, { method: "POST", headers, body, signal });
     if (!res.ok) throw new Error(httpProblem(res.status));
     const data = (await res.json()) as { choices?: Array<{ message?: { content?: unknown } }> };
     const content = data.choices?.[0]?.message?.content;
