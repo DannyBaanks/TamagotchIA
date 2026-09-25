@@ -3,7 +3,8 @@
 ## El comando
 
 ```bash
-cd "/home/danny/Development/ISyCo Git/TamagotchIA"
+cd TamagotchIA        # la carpeta donde clonaste el repo
+npm install           # solo la primera vez
 npm run dev
 ```
 

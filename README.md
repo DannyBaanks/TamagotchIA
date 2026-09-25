@@ -1,19 +1,117 @@
-<p align="center"><img src="public/icons/icon-192.png" width="96" alt="TamagotchIA"></p>
+<p align="center">
+  <img src="docs/img/hero.jpg" alt="TamagotchIA en tres pantallas: el huevo, Malbolgato saludando y Shinji pensativo" width="100%">
+</p>
 
-# TamagotchIA
+<h1 align="center">TamagotchIA</h1>
 
-Una criatura de bolsillo que vive en tu teléfono. Tiene hambre, sueño, ánimo y memoria; crece si la cuidas y se enferma si la olvidas. Un modelo de lenguaje puede ser su voz, pero **el juego lo decide un motor determinista**: el modelo solo le pone palabras.
+<p align="center">
+  <strong>Una criatura de bolsillo que vive en tu teléfono.</strong><br>
+  Tiene hambre, sueño y memoria. Crece si la cuidas. Y si quieres, una IA le pone voz.
+</p>
 
-- **Funciona sin internet y sin clave.** La criatura tiene su propia voz local.
-- **Se instala como app** (PWA) desde el navegador del teléfono.
-- **Cualquier modelo compatible con OpenAI** puede ser su persona: OpenRouter, NVIDIA, OpenAI u Ollama. La clave se queda en el teléfono.
-- **Dos especies**, con el arte de [Companion](https://github.com/DannyBaanks/Companion): Malbolgato (neón) y Shinji (cálido).
+<p align="center">
+  <a href="https://dannybaanks.github.io/TamagotchIA/"><strong>▶&nbsp; Jugar ahora</strong></a>
+  &nbsp;·&nbsp; gratis &nbsp;·&nbsp; sin cuenta &nbsp;·&nbsp; funciona sin internet
+</p>
 
-```text
-acción → motor determinista → estado + evento → modelo (resumen acotado) → frase corta
-```
+---
 
-## Probarlo
+## ¿Qué es?
+
+¿Te acuerdas de los Tamagotchi, esos huevitos de llavero que había que alimentar para que no se pusieran tristes? TamagotchIA es eso mismo, pero en tu teléfono y con una personalidad de verdad.
+
+Adoptas un huevo, le pones nombre y a los 90 segundos nace tu criatura. A partir de ahí depende de ti: **el tiempo sigue corriendo aunque cierres la app**. Si la alimentas, juegas con ella y la bañas, crece. Si te olvidas de ella, le da hambre, se ensucia y hasta se puede enfermar. No se muere, pero te extraña.
+
+## Así se juega
+
+| | |
+|---|---|
+| 🍽️ **Comer** | Manzana, arroz, pescado o dulce. Cada criatura tiene una comida que no soporta, y si le das mucho la misma, la vuelve su favorita. |
+| 🎾 **Jugar** | Juega un rato o reta a tus reflejos con **Atrapa la estrella**. |
+| 🤲 **Mimos** | Tócala. Se pone contenta, y si le haces mimos seguido, se encariña contigo. |
+| 💬 **Hablar** | Dile algo y te contesta. |
+| 🧽 **Bañar** · 🌙 **Dormir** · 🧭 **Explorar** | Cuando sale a explorar, trae tesoritos: una pluma azul, una canica verde, un caracol dormido… |
+| 📔 **Diario** | Guarda sus recuerdos: el día que nació, su comida favorita, la vez que se enfermó y la cuidaste. |
+
+Con los cuidados pasa de **bebé** a **peque** y luego a **grande**. Si la descuidas, no crece.
+
+## Conoce a los huevos
+
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/img/malbolgato.png" width="240" alt="Malbolgato saludando en su cuarto neón"><br>
+      <strong>Malbolgato</strong><br>
+      Gato de circuitos. Brilla en la oscuridad y hace glitch cuando se emociona.
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/img/shinji.png" width="240" alt="Shinji pensativo en su cuarto cálido al atardecer"><br>
+      <strong>Shinji</strong><br>
+      Atigrado de uniforme marinero. Cariñoso, dormilón y un poco dramático.
+    </td>
+  </tr>
+</table>
+
+Cada uno tiene su propio cuarto, y el cielo cambia con la hora real: amanecer, día, atardecer y noche con estrellas.
+
+<p align="center">
+  <img src="docs/img/minijuego.png" width="240" alt="El minijuego Atrapa la estrella">
+  &nbsp;&nbsp;
+  <img src="docs/img/diario.png" width="240" alt="El diario con los recuerdos de la criatura">
+</p>
+
+## Dale una voz con IA (opcional)
+
+Sin configurar nada, tu criatura ya habla con frases propias. Pero si quieres que **improvise**, puedes conectar un modelo de inteligencia artificial y se vuelve su personalidad: le cuentas algo y te contesta como la criatura, no como un asistente.
+
+En **Ajustes → La voz** eliges un servicio compatible (OpenRouter, NVIDIA, OpenAI, o un modelo en tu propia computadora con Ollama), pegas tu clave y pulsas **Probar la voz**.
+
+Dos cosas que nunca cambian:
+
+- **La IA no puede hacer trampa.** Solo le pone palabras. El hambre, la salud y el crecimiento los decide el juego, y si la IA dice algo raro, se ignora.
+- **Tu clave se queda en tu teléfono.** Solo viaja al servicio de IA que elegiste; no se guarda en la partida ni sale en los respaldos.
+
+## Te avisa cuando te necesita
+
+Activa los avisos en **Ajustes → Avisos** y te dice cuándo tiene hambre, se enfermó, se quedó sin energía o despertó. Viene con **horas de silencio** (de 10 de la noche a 8 de la mañana), para que no te despierte a las 3 a.m.; lo que pase de noche te lo cuenta en la mañana. También puedes ver a qué hora te va a necesitar si no haces nada.
+
+> Por ahora los avisos llegan mientras la app sigue abierta en segundo plano. Con la app cerrada del todo, el teléfono no la deja despertar; eso llegará con la versión de app nativa.
+
+## Instálala en tu celular
+
+Entra a **[dannybaanks.github.io/TamagotchIA](https://dannybaanks.github.io/TamagotchIA/)** desde tu teléfono y:
+
+- **Android (Chrome):** menú ⋮ → **Instalar app** (o «Agregar a la pantalla principal»).
+- **iPhone (Safari):** botón Compartir → **Agregar a inicio**.
+
+Queda con su propio ícono, se abre a pantalla completa y funciona aunque no tengas internet.
+
+## Preguntas frecuentes
+
+**¿Cuesta algo?**
+No. Es gratis y no tiene anuncios ni compras. Si conectas una IA, lo que cobre ese servicio es entre tú y él.
+
+**¿Necesito internet?**
+Solo la primera vez que la abres. Después funciona sin conexión. La voz con IA sí necesita internet; sin él, habla con su voz propia.
+
+**¿Mis datos se van a algún lado?**
+No. No hay cuentas ni servidores: tu criatura vive solo en tu teléfono.
+
+**¿Y si cambio de teléfono?**
+**Ajustes → Exportar respaldo** te da un archivo. En el teléfono nuevo, **Importar** y listo: llega con todos sus recuerdos.
+
+**¿Se puede morir?**
+No. Si la descuidas se enferma y se pone triste, pero se recupera cuando vuelves a cuidarla.
+
+**¿Si la dejo una semana sola?**
+Al volver te va a extrañar mucho, pero la app no cuenta más de 3 días de ausencia, así que no te vas a encontrar un desastre.
+
+## Estado
+
+Versión **0.1**, recién salida del huevo 🐣. Está probada en Chrome con tamaño de celular y en Firefox de computadora. **Todavía no se ha probado** en un teléfono físico ni con un servicio de IA real; si encuentras algo raro, [cuéntanos](https://github.com/DannyBaanks/TamagotchIA/issues).
+
+<details>
+<summary><strong>Para desarrolladores</strong></summary>
 
 ```bash
 npm install
@@ -22,26 +120,16 @@ npm test         # 54 tests: motor, voz, guardado y avisos
 npm run build    # la app completa en dist/
 ```
 
-Los comandos con su salida real y las trampas están en la **[guía en español](GUIA.md)**.
+- **Motor determinista** (`src/engine/`): funciones puras con el reloj inyectado. La simulación avanza en pasos de 5 minutos con tope de 72 horas, y el pronóstico de necesidades alimenta los avisos.
+- **Contrato de la voz** (`src/persona/`): el modelo recibe un resumen acotado y debe responder un JSON (de 3 a 20 palabras, emoción, intención y animación de listas cerradas). Si no, habla la voz local.
+- **Guardado** (`src/store/`): con checksum y respaldo automático; la clave va aparte.
+- **PWA** (`public/sw.js`): funciona offline con todas las poses precargadas.
 
-## Qué hay adentro
+Todos los comandos, con su salida real y las trampas conocidas, están en la [guía](GUIA.md). El diseño está en [SPEC.md](SPEC.md) y el plan en [ROADMAP.md](ROADMAP.md).
+</details>
 
-| Carpeta | Qué hace |
-|---|---|
-| `src/engine/` | El motor: simulación en pasos de 5 minutos con tope de 72 h, comandos, enfermedad, evolución y política de recuerdos. Funciones puras con el reloj inyectado |
-| `src/persona/` | El contrato de la voz: qué ve el modelo, qué puede responder (3 a 20 palabras y listas cerradas) y la voz local de respaldo |
-| `src/store/` | Guardado con checksum y respaldo automático; la clave va aparte y nunca se exporta |
-| `src/ui/`, `src/app.ts` | La pantalla: hábitat, burbujas, minijuego, diario, ajustes y debug |
-| `public/sw.js` | Modo offline: guarda la app y todas las poses |
+## Créditos
 
-El diseño completo está en [SPEC.md](SPEC.md) (§16 explica por qué pasó de Python a PWA) y el plan en [ROADMAP.md](ROADMAP.md).
+Los personajes vienen de [Companion](https://github.com/DannyBaanks/Companion), la mascota de escritorio del mismo autor. La tipografía es Fredoka. Detalles de licencias en [NOTICE.md](NOTICE.md).
 
-## Estado
-
-`0.1` jugable. Verificado en Chrome headless a 390×844: onboarding, eclosión, los dos hábitats, comer, platicar, minijuego, diario, ajustes, debug, recarga sin red y la voz de un modelo contra un endpoint local de prueba.
-
-**NO PROBADO:** un proveedor de modelos real, un teléfono físico y la instalación desde HTTPS. Detalles en la [guía](GUIA.md).
-
-## Licencia
-
-MIT. El arte viene de Companion (MIT) y la fuente es Fredoka (OFL-1.1); ver [NOTICE.md](NOTICE.md).
+Hecho con cariño por [DannyBaanks](https://github.com/DannyBaanks). Licencia MIT.

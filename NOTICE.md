@@ -4,13 +4,13 @@
 
 | | |
 |---|---|
-| Source | Companion (`/home/danny/Development/ISyCo Git/Companion`, https://github.com/DannyBaanks/Companion) |
+| Source | Companion, https://github.com/DannyBaanks/Companion |
 | License | MIT, Copyright (c) 2026 ISyCo contributors |
 | Copied from | Companion commit `e7e8692`, taken with `git show HEAD:…` (committed files only) |
 | Files | `public/packs/malbolge-cat/*.gif` (6 animated poses), `public/packs/tabby-shinji-cat/*.png` (6 static poses) |
 | Hashes | `public/packs/SHA256SUMS` |
 
-Shinji's animated GIFs exist in Danny's Companion checkout but are **not committed** there, so they were not copied; TamagotchIA uses Shinji's committed PNGs and animates them with CSS.
+Shinji's animated GIFs exist in the author's Companion checkout but are **not committed** there, so they were not copied; TamagotchIA uses Shinji's committed PNGs and animates them with CSS.
 
 ## Font: Fredoka
 
