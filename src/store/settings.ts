@@ -27,6 +27,10 @@ export interface Preset {
   /** Filled in when the model field is empty. */
   model?: string;
   note: string;
+  /** The APK has no CORS, so some providers read differently there. */
+  nativeLabel?: string;
+  nativeModel?: string;
+  nativeNote?: string;
 }
 
 /**
@@ -45,6 +49,9 @@ export const PRESETS: Preset[] = [
     label: "NVIDIA directo (no funciona en el navegador)",
     baseUrl: "https://integrate.api.nvidia.com/v1",
     note: "El servidor de NVIDIA no deja que una página web le hable, así que tu clave nvapi- aquí no sirve. Usa los mismos modelos gratis por OpenRouter.",
+    nativeLabel: "NVIDIA directo (clave nvapi- gratis)",
+    nativeModel: "google/gemma-4-31b-it", // in NVIDIA's /v1/models list on 2026-09-25
+    nativeNote: "En la app sí funciona directo con tu clave gratis nvapi- de build.nvidia.com. El nombre del modelo sale en la página de cada modelo.",
   },
   { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", note: "De pago, con tu clave de OpenAI." },
   { label: "Ollama (en este aparato)", baseUrl: "http://localhost:11434/v1", note: "Un modelo en este mismo aparato. En el celular, localhost es el celular." },

@@ -124,3 +124,26 @@ describe("decide", () => {
     expect(decide(s, withStats(c(), {}, { asleep: false }), at(15), ON, false).send[0]?.title).toBe("☀️ TontoPT ya despertó");
   });
 });
+
+import { afterQuiet, planAlerts } from "../src/notify/plan";
+
+describe("plan (APK: alerts scheduled with the app closed)", () => {
+  it("moves an alert that falls in quiet hours to the end of the quiet window", () => {
+    expect(afterQuiet(at(23, 40), ON)).toBe(new Date(2026, 8, 25, 8, 0).getTime());
+    expect(afterQuiet(at(15), ON)).toBe(at(15));
+  });
+
+  it("spaces alerts by the minimum gap, most urgent first when they collide", () => {
+    const plan = planAlerts([{ kind: "hungry", at: at(23) }, { kind: "sick", at: at(23, 30) }, { kind: "dirty", at: at(12) }], ON, "TontoPT");
+    expect(plan.map((p) => [p.kind, new Date(p.at).getHours(), new Date(p.at).getMinutes()])).toEqual([
+      ["dirty", 12, 0],
+      ["sick", 8, 0],
+      ["hungry", 8, 20],
+    ]);
+    expect(plan[1]!.title).toBe("🤒 TontoPT se enfermó");
+  });
+
+  it("plans nothing when alerts are off", () => {
+    expect(planAlerts([{ kind: "hungry", at: at(12) }], DEFAULT_PREFS, "x")).toEqual([]);
+  });
+});

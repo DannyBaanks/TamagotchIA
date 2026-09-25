@@ -17,6 +17,9 @@ import { browserStore, exportSave, importSave, load, save, wipe } from "./store/
 import { PRESETS, loadSecret, loadSettings, saveSecret, saveSettings, type PersonaSettings } from "./store/settings";
 import { forecast } from "./engine/forecast";
 import { alertText, decide, inQuietHours, type NotifyPrefs, type NotifyState } from "./notify/alerts";
+import { isNative, nativePermission, schedule, showNow } from "./notify/native";
+import { planAlerts } from "./notify/plan";
+import { App as NativeApp } from "@capacitor/app";
 import { askPermission, loadPrefs, loadState, savePrefs, saveState, show, support, type Support } from "./notify/deliver";
 import { $, buzz, formatAge, h } from "./ui/dom";
 import { ATTENTION, FOOD_LABEL, MEMORY_ICON, STAGE_LABEL, clockLabel, dayLabel, describeEvent } from "./ui/labels";
@@ -49,6 +52,7 @@ export class App {
   private stopMiniGame: (() => void) | null = null;
   private seqSeen = 0;
   private notifyPrefs: NotifyPrefs;
+  private preloadedSpecies: string | null = null;
   private notifyState: NotifyState;
 
   constructor(private readonly root: HTMLElement) {
@@ -81,7 +85,19 @@ export class App {
     if (!this.persistent) this.toast("Este navegador no deja guardar: la partida se perderá al cerrar.");
     setInterval(() => this.tick(), 1000);
     const flush = () => this.persist();
-    document.addEventListener("visibilitychange", () => document.visibilityState === "hidden" && flush());
+    document.addEventListener("visibilitychange", () => {
+      if (document.visibilityState !== "hidden") return;
+      flush();
+      this.rescheduleNative();
+    });
+    if (isNative()) {
+      // Android back: close an open sheet first, otherwise send the app to the background
+      void NativeApp.addListener("backButton", () => {
+        if (this.root.querySelector(".sheet-host")?.childElementCount) this.closeSheet();
+        else void NativeApp.minimizeApp();
+      });
+      this.rescheduleNative();
+    }
     window.addEventListener("pagehide", flush);
   }
 
@@ -97,7 +113,7 @@ export class App {
 
   // ---------------------------------------------------------------- alerts
   private checkAlerts(): void {
-    if (!this.world) return;
+    if (!this.world || isNative()) return;
     const onScreen = document.visibilityState === "visible";
     const { send, next } = decide(this.notifyState, this.world.creature, this.now(), this.notifyPrefs, onScreen);
     if (JSON.stringify(next) !== JSON.stringify(this.notifyState)) {
@@ -105,6 +121,29 @@ export class App {
       saveState(this.store, next);
     }
     for (const alert of send) void show(alert, "./icons/icon-192.png");
+  }
+
+  /** APK: give Android the predicted alerts so they fire with the app closed. */
+  private rescheduleNative(): void {
+    if (!isNative() || !this.world) return;
+    const plan = planAlerts(forecast(this.world, this.now(), 48 * R.HOUR), this.notifyPrefs, this.world.creature.name);
+    // the plan is on the game clock; Android needs real time (they differ only with the debug clock)
+    void schedule(plan.map((p) => ({ ...p, at: p.at - this.debug.offsetMs })), Date.now());
+  }
+
+
+  /** Preload all pose GIFs for a species so pose switches are instant (no frame overlap). */
+  private preloadSprites(speciesId: string): void {
+    if (this.preloadedSpecies === speciesId) return;
+    const species = speciesById(speciesId);
+    if (!species.animated) { this.preloadedSpecies = speciesId; return; }
+    const poses: Pose[] = ["idle", "thinking", "working", "success", "error", "waiting"];
+    for (const p of poses) {
+      const img = new Image();
+      img.src = species.sprite(p);
+      img.decode?.().catch(() => {});
+    }
+    this.preloadedSpecies = speciesId;
   }
 
   private persist(): void {
@@ -120,6 +159,7 @@ export class App {
     this.world = result.world;
     this.seqSeen = this.world.seq;
     this.persist();
+    this.rescheduleNative();
     buzz();
 
     const pose: Record<string, Pose> = { feed: "success", play: "working", pet: "success", clean: "success", explore: "success", sleep: "waiting", minigame: "success" };
@@ -290,6 +330,7 @@ export class App {
     if (!w || !game) return;
     const c = w.creature;
     const species = speciesById(c.species);
+    this.preloadSprites(c.species);
     const now = Date.now();
     if (this.transient && this.transient.until < now) this.transient = null;
     if (this.speech && this.speech.until < now) this.speech = null;
@@ -469,7 +510,7 @@ export class App {
     const s = { ...this.settings };
     const enabled = h("input", { type: "checkbox", id: "p-on", ...(s.enabled ? { checked: true } : {}) }) as HTMLInputElement;
     const preset = h("select", { class: "field", },
-      h("option", { value: "" }, "Elegir proveedor…"), ...PRESETS.map((p, i) => h("option", { value: String(i) }, p.label))) as HTMLSelectElement;
+      h("option", { value: "" }, "Elegir proveedor…"), ...PRESETS.map((p, i) => h("option", { value: String(i) }, (isNative() && p.nativeLabel) || p.label))) as HTMLSelectElement;
     const url = h("input", { class: "field", value: s.baseUrl, inputmode: "url", autocomplete: "off" }) as HTMLInputElement;
     const model = h("input", { class: "field", value: s.model, placeholder: "p. ej. google/gemma-4-31b-it:free", autocomplete: "off" }) as HTMLInputElement;
     const key = h("input", { class: "field", type: "password", value: loadSecret(this.store), placeholder: "API key (opcional para modelos locales)", autocomplete: "off" }) as HTMLInputElement;
@@ -479,8 +520,9 @@ export class App {
       const chosen = PRESETS[Number(preset.value)];
       if (!chosen) return;
       url.value = chosen.baseUrl;
-      if (chosen.model && !model.value.trim()) model.value = chosen.model;
-      presetNote.textContent = chosen.note;
+      const suggested = (isNative() && chosen.nativeModel) || chosen.model;
+      if (suggested && !model.value.trim()) model.value = suggested;
+      presetNote.textContent = (isNative() && chosen.nativeNote) || chosen.note;
     });
     // the most common mix-up: a free NVIDIA key pasted for OpenRouter, or the other way round
     const keyNote = h("p", { class: "hint small", "aria-live": "polite" });
@@ -488,7 +530,9 @@ export class App {
       const k = key.value.trim();
       const u = url.value;
       keyNote.textContent =
-        k.startsWith("nvapi-") && !u.includes("nvidia.com") ? "Esa es una clave de NVIDIA (nvapi-). OpenRouter usa claves que empiezan con sk-or-." :
+        k.startsWith("nvapi-") && !u.includes("nvidia.com") ? (isNative()
+          ? "Esa es una clave de NVIDIA (nvapi-): elige «NVIDIA directo» como proveedor."
+          : "Esa es una clave de NVIDIA (nvapi-). OpenRouter usa claves que empiezan con sk-or-.") :
         k.startsWith("sk-or-") && !u.includes("openrouter.ai") ? "Esa es una clave de OpenRouter (sk-or-); cambia el proveedor a OpenRouter." : "";
     };
     key.addEventListener("input", checkKey);
@@ -567,7 +611,12 @@ export class App {
       sel.addEventListener("change", () => onChange(Number(sel.value)));
       return h("label", { class: "field-label" }, label, sel);
     };
-    const describe = (s: Support): string => ({
+    const native = isNative();
+    let nativeOk = false;
+    const describeNative = () => nativeOk
+      ? this.notifyPrefs.enabled ? "Activados. Te aviso aunque la app esté cerrada." : "Permiso concedido; activa el interruptor."
+      : "Toca el interruptor y acepta el permiso de notificaciones.";
+    const describe = (s: Support): string => native ? describeNative() : ({
       ok: this.notifyPrefs.enabled ? "Activados. Te aviso cuando la app está abierta en segundo plano." : "Permiso concedido; activa el interruptor.",
       default: "Toca el interruptor y acepta el permiso del navegador.",
       denied: "El navegador tiene los avisos bloqueados para esta página. Actívalos desde la configuración del sitio.",
@@ -576,6 +625,7 @@ export class App {
     })[s];
     const refresh = () => {
       status.textContent = describe(support());
+      this.rescheduleNative();
       const w = this.world;
       if (!w) return;
       const next = forecast(w, this.now()).slice(0, 3);
@@ -585,8 +635,12 @@ export class App {
         : [h("li", {}, h("span", {}, "Nada en las próximas 24 h"))]));
     };
     const saveNotify = () => savePrefs(this.store, this.notifyPrefs);
+    if (native) void nativePermission(false).then((ok) => { nativeOk = ok; refresh(); });
     toggle.addEventListener("change", async () => {
-      if (toggle.checked && support() !== "ok") {
+      if (native && toggle.checked) {
+        nativeOk = await nativePermission(true);
+        if (!nativeOk) toggle.checked = false;
+      } else if (toggle.checked && support() !== "ok") {
         const result = await askPermission();
         if (result !== "ok") toggle.checked = false;
       }
@@ -595,7 +649,8 @@ export class App {
       refresh();
     });
     const test = h("button", { class: "btn", type: "button", onclick: async () => {
-      const ok = await show(alertText("hungry", this.world?.creature.name ?? "Tu criatura"), "./icons/icon-192.png");
+      const sample = alertText("hungry", this.world?.creature.name ?? "Tu criatura");
+      const ok = native ? await showNow(sample.title, sample.body) : await show(sample, "./icons/icon-192.png");
       status.textContent = ok ? "Aviso de prueba enviado." : describe(support());
     } }, "Probar un aviso");
     refresh();
@@ -605,12 +660,14 @@ export class App {
       h("label", { class: "switch" }, toggle, h("span", {}, "Avisarme")),
       status,
       h("div", { class: "row" },
-        hourSelect(this.notifyPrefs.quietStart, "Silencio desde", (v) => { this.notifyPrefs = { ...this.notifyPrefs, quietStart: v }; saveNotify(); }),
-        hourSelect(this.notifyPrefs.quietEnd, "hasta", (v) => { this.notifyPrefs = { ...this.notifyPrefs, quietEnd: v }; saveNotify(); })),
+        hourSelect(this.notifyPrefs.quietStart, "Silencio desde", (v) => { this.notifyPrefs = { ...this.notifyPrefs, quietStart: v }; saveNotify(); this.rescheduleNative(); }),
+        hourSelect(this.notifyPrefs.quietEnd, "hasta", (v) => { this.notifyPrefs = { ...this.notifyPrefs, quietEnd: v }; saveNotify(); this.rescheduleNative(); })),
       test,
       h("p", { class: "label" }, "Próximos avisos (si no haces nada)"),
       upcoming,
-      h("p", { class: "hint small" }, "Con la app cerrada del todo un navegador no puede avisar sin un servidor. En la versión APK estos mismos horarios se programan en el teléfono."),
+      h("p", { class: "hint small" }, native
+        ? "Estos horarios quedan programados en el teléfono: llegan aunque cierres la app."
+        : "Con la app cerrada del todo un navegador no puede avisar sin un servidor. En la versión APK estos mismos horarios se programan en el teléfono."),
     ];
   }
 
