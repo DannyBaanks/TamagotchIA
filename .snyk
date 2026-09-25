@@ -1,0 +1,19 @@
+# Snyk (https://snyk.io) policy file, patches or ignores known vulnerabilities.
+version: v1.25.1
+# ignores vulnerabilities until expiry date; change duration by modifying expiry date
+ignore:
+  GHSA-gv7w-rqvm-qjhr:
+    - '*':
+        reason: >-
+          Advisory withdrawn 2026-06-17: paquete mal identificado
+          (deno-esbuild), no afecta a esbuild npm
+        expires: 2026-10-25T08:46:27.717Z
+        created: 2026-09-25T08:46:27.720Z
+  SNYK-JS-ESBUILD-17750822:
+    - '*':
+        reason: >-
+          Advisory withdrawn 2026-06-17: paquete mal identificado
+          (deno-esbuild), no afecta a esbuild npm
+        expires: 2026-10-25T08:47:45.697Z
+        created: 2026-09-25T08:47:45.699Z
+patch: {}
