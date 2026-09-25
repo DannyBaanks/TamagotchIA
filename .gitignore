@@ -3,3 +3,7 @@ dist/
 *.log
 .vite/
 coverage/
+
+# Capacitor generated
+android/
+tools/
