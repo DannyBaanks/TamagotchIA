@@ -122,6 +122,50 @@ Prueba de entrega del mismo día: con la app en segundo plano, el huevo eclosion
 
 **Con la app cerrada del todo no llegan avisos.** Una PWA sin servidor no puede despertarse sola. La predicción ya existe (`src/engine/forecast.ts`), así que en la versión APK esos horarios se programan como notificaciones locales del sistema. **NO PROBADO** en un teléfono físico.
 
+## La app de Android (APK)
+
+La misma app, empaquetada con Capacitor. Tiene dos cosas que la web no puede hacer:
+
+- **Avisos con la app cerrada.** El pronóstico del motor se programa en Android como notificaciones locales. Cada vez que haces algo, el plan se rehace.
+- **Voz directa con NVIDIA.** En la app el HTTP es nativo y no tiene CORS, así que la clave gratis `nvapi-` de build.nvidia.com funciona sin pasar por OpenRouter.
+
+### Compilarla
+
+Solo la primera vez: JDK 21 (en esta máquina ya venía instalado) y el Android SDK en `~/Android/Sdk` con `platform-tools`, `platforms;android-36` y `build-tools;36.0.0`. Gradle descarga el resto solo.
+
+```bash
+npm run build                      # la app web en dist/
+npx cap sync android               # la copia dentro del proyecto Android
+cd android && ./gradlew assembleDebug
+```
+
+Salida real de la primera compilación (2026-09-25; tardó porque bajó Gradle y todas sus dependencias; la segunda tardó 4 s):
+
+```text
+BUILD SUCCESSFUL in 52m 10s
+154 actionable tasks: 154 executed
+```
+
+El APK queda en `android/app/build/outputs/apk/debug/app-debug.apk`. Para revisarlo:
+
+```console
+$ ~/Android/Sdk/build-tools/36.0.0/aapt2 dump badging android/app/build/outputs/apk/debug/app-debug.apk
+package: name='io.github.dannybaanks.tamagotchia' versionCode='1' versionName='0.1.0' … compileSdkVersion='36'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.SCHEDULE_EXACT_ALARM'
+application-label:'TamagotchIA'
+```
+
+Si alguna vez regeneras `android/` desde cero (`npx cap add android`), corre `python3 tools/android_art.py` para cambiar el logo de Capacitor por el de TamagotchIA (ícono, splash e ícono de notificación).
+
+### Instalarla en el teléfono
+
+**NO PROBADO** en un teléfono físico todavía. Dos caminos:
+
+- **Con cable:** activa las opciones de desarrollador y la depuración USB en el teléfono, conéctalo y corre `~/Android/Sdk/platform-tools/adb install -r TamagotchIA-0.1.0-debug.apk`.
+- **Sin cable:** pasa el `.apk` al teléfono (Telegram a ti mismo, Drive, cable como almacenamiento), ábrelo y permite «instalar apps desconocidas» para esa app.
+
 ## Respaldo
 
 Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. **Importar** lo carga en otro teléfono. El archivo lleva un checksum, así que uno editado a mano se rechaza con «el checksum no coincide».
@@ -172,3 +216,7 @@ Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. 
 7. **Android puede matar la pestaña en segundo plano.** Mientras el navegador conserve la app viva, avisa (Chrome revisa como mucho una vez por minuto en segundo plano). Si el sistema la cierra para ahorrar batería, deja de avisar hasta que la abras. Es la misma limitación de «app cerrada».
 
 8. **«Probar un aviso» no dice nada.** Si el permiso quedó bloqueado, el navegador ya no vuelve a preguntar: hay que desbloquearlo desde la configuración del sitio (el candado junto a la dirección). Por la IP de la red tampoco funciona (trampa 1).
+
+9. **El APK de prueba está firmado con la clave de depuración de esta computadora** (`~/.android/debug.keystore`). Android solo acepta una actualización si viene firmada con la misma clave: si esa clave se pierde o compilas en otra máquina, hay que desinstalar la app antes, y **se borra la partida**. Exporta un respaldo antes. Por lo mismo, Play Protect puede avisar «app desconocida»: es normal en un APK de prueba.
+
+10. **Los avisos de la app pueden llegar tarde.** Android 12 y posteriores piden permiso de «Alarmas y recordatorios» para avisar a la hora exacta; sin él, y con el ahorro de batería activo, Android puede agruparlos o retrasarlos. **NO PROBADO** en un teléfono físico.
