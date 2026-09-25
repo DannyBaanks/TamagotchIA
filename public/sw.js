@@ -1,6 +1,6 @@
 /* TamagotchIA service worker: keeps the app shell and the art available offline.
  * Same-origin GETs only. Calls to a model endpoint are other origins and are never cached. */
-const CACHE = "tamagotchia-v2";
+const CACHE = "tamagotchia-v3";
 const POSES = ["idle", "thinking", "working", "success", "error", "waiting"];
 // every pose of every species, so a state never seen online still shows offline
 const ART = [...POSES.map((p) => `./packs/malbolge-cat/${p}.gif`), ...POSES.map((p) => `./packs/tabby-shinji-cat/${p}.png`)];
@@ -30,5 +30,16 @@ self.addEventListener("fetch", (event) => {
         return response;
       })
       .catch(() => caches.match(request).then((hit) => hit || caches.match("./index.html"))),
+  );
+});
+
+// tapping an alert brings the app to the front (or opens it)
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(
+    self.clients.matchAll({ type: "window", includeUncontrolled: true }).then((wins) => {
+      const open = wins.find((w) => "focus" in w);
+      return open ? open.focus() : self.clients.openWindow(event.notification.data?.url || "./");
+    }),
   );
 });

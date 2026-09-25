@@ -18,7 +18,7 @@ acción → motor determinista → estado + evento → modelo (resumen acotado) 
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # 41 tests del motor, la voz y el guardado
+npm test         # 54 tests: motor, voz, guardado y avisos
 npm run build    # la app completa en dist/
 ```
 

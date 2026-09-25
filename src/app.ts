@@ -15,6 +15,9 @@ import { OpenAICompatibleProvider, narrate, type Narration, type PersonalityProv
 import { SPECIES, poseForAnimation, speciesById } from "./species";
 import { browserStore, exportSave, importSave, load, save, wipe } from "./store/save";
 import { PRESETS, loadSecret, loadSettings, saveSecret, saveSettings, type PersonaSettings } from "./store/settings";
+import { forecast } from "./engine/forecast";
+import { alertText, decide, inQuietHours, type NotifyPrefs, type NotifyState } from "./notify/alerts";
+import { askPermission, loadPrefs, loadState, savePrefs, saveState, show, support, type Support } from "./notify/deliver";
 import { $, buzz, formatAge, h } from "./ui/dom";
 import { ATTENTION, FOOD_LABEL, MEMORY_ICON, STAGE_LABEL, clockLabel, dayLabel, describeEvent } from "./ui/labels";
 import { playMiniGame } from "./ui/minigame";
@@ -45,6 +48,8 @@ export class App {
   private lastNarration: Narration | null = null;
   private stopMiniGame: (() => void) | null = null;
   private seqSeen = 0;
+  private notifyPrefs: NotifyPrefs;
+  private notifyState: NotifyState;
 
   constructor(private readonly root: HTMLElement) {
     const { store, persistent } = browserStore();
@@ -52,6 +57,8 @@ export class App {
     this.persistent = persistent;
     this.settings = loadSettings(store);
     this.debug = this.loadDebug();
+    this.notifyPrefs = loadPrefs(store);
+    this.notifyState = loadState(store);
   }
 
   // ---------------------------------------------------------------- time
@@ -82,9 +89,22 @@ export class App {
     if (!this.world) return;
     this.world = simulateElapsed(this.world, this.now());
     this.narrateNewEvents();
+    this.checkAlerts();
     this.ticks += 1;
     if (this.ticks % SAVE_EVERY_TICKS === 0) this.persist();
     this.update();
+  }
+
+  // ---------------------------------------------------------------- alerts
+  private checkAlerts(): void {
+    if (!this.world) return;
+    const onScreen = document.visibilityState === "visible";
+    const { send, next } = decide(this.notifyState, this.world.creature, this.now(), this.notifyPrefs, onScreen);
+    if (JSON.stringify(next) !== JSON.stringify(this.notifyState)) {
+      this.notifyState = next;
+      saveState(this.store, next);
+    }
+    for (const alert of send) void show(alert, "./icons/icon-192.png");
   }
 
   private persist(): void {
@@ -501,6 +521,7 @@ export class App {
         h("button", { class: "btn", type: "button", onclick: () => { commit(); this.toast("Guardado"); } }, "Guardar"),
         h("button", { class: "btn primary", type: "button", onclick: () => void test() }, "Probar la voz")),
       result,
+      ...this.alertSettings(),
       h("h3", {}, "Partida"),
       h("div", { class: "row wrap" },
         h("button", { class: "btn", type: "button", onclick: () => this.download() }, "Exportar respaldo"),
@@ -510,6 +531,63 @@ export class App {
       h("h3", {}, "Desarrollo"),
       h("button", { class: "btn", type: "button", onclick: () => this.openDebug() }, "Abrir panel debug"),
       h("p", { class: "hint small" }, "TamagotchIA 0.1 · arte de Companion (MIT)"));
+  }
+
+  private alertSettings(): Node[] {
+    const status = h("p", { class: "hint", "aria-live": "polite" });
+    const upcoming = h("ul", { class: "list compact" });
+    const toggle = h("input", { type: "checkbox", ...(this.notifyPrefs.enabled ? { checked: true } : {}) }) as HTMLInputElement;
+    const hours = Array.from({ length: 24 }, (_, i) => i);
+    const hourSelect = (value: number, label: string, onChange: (v: number) => void) => {
+      const sel = h("select", { class: "field" }, ...hours.map((x) => h("option", { value: x, ...(x === value ? { selected: true } : {}) }, `${String(x).padStart(2, "0")}:00`))) as HTMLSelectElement;
+      sel.addEventListener("change", () => onChange(Number(sel.value)));
+      return h("label", { class: "field-label" }, label, sel);
+    };
+    const describe = (s: Support): string => ({
+      ok: this.notifyPrefs.enabled ? "Activados. Te aviso cuando la app está abierta en segundo plano." : "Permiso concedido; activa el interruptor.",
+      default: "Toca el interruptor y acepta el permiso del navegador.",
+      denied: "El navegador tiene los avisos bloqueados para esta página. Actívalos desde la configuración del sitio.",
+      insecure: "Los avisos necesitan HTTPS o localhost. Por la IP de la red no se pueden (lee la GUIA).",
+      unsupported: "Este navegador no tiene notificaciones.",
+    })[s];
+    const refresh = () => {
+      status.textContent = describe(support());
+      const w = this.world;
+      if (!w) return;
+      const next = forecast(w, this.now()).slice(0, 3);
+      upcoming.replaceChildren(...(next.length
+        ? next.map((f) => h("li", {}, h("span", {}, alertText(f.kind, w.creature.name).title),
+            h("time", {}, inQuietHours(f.at, this.notifyPrefs) ? `${clockLabel(f.at)} · llega a las ${String(this.notifyPrefs.quietEnd).padStart(2, "0")}:00` : clockLabel(f.at))))
+        : [h("li", {}, h("span", {}, "Nada en las próximas 24 h"))]));
+    };
+    const saveNotify = () => savePrefs(this.store, this.notifyPrefs);
+    toggle.addEventListener("change", async () => {
+      if (toggle.checked && support() !== "ok") {
+        const result = await askPermission();
+        if (result !== "ok") toggle.checked = false;
+      }
+      this.notifyPrefs = { ...this.notifyPrefs, enabled: toggle.checked };
+      saveNotify();
+      refresh();
+    });
+    const test = h("button", { class: "btn", type: "button", onclick: async () => {
+      const ok = await show(alertText("hungry", this.world?.creature.name ?? "Tu criatura"), "./icons/icon-192.png");
+      status.textContent = ok ? "Aviso de prueba enviado." : describe(support());
+    } }, "Probar un aviso");
+    refresh();
+    return [
+      h("h3", {}, "Avisos"),
+      h("p", { class: "hint" }, "Te avisa cuando tiene hambre, se ensucia, se enferma, se queda sin energía, te extraña, despierta o sale del huevo. Un aviso por vez, y nunca en horas de silencio."),
+      h("label", { class: "switch" }, toggle, h("span", {}, "Avisarme")),
+      status,
+      h("div", { class: "row" },
+        hourSelect(this.notifyPrefs.quietStart, "Silencio desde", (v) => { this.notifyPrefs = { ...this.notifyPrefs, quietStart: v }; saveNotify(); }),
+        hourSelect(this.notifyPrefs.quietEnd, "hasta", (v) => { this.notifyPrefs = { ...this.notifyPrefs, quietEnd: v }; saveNotify(); })),
+      test,
+      h("p", { class: "label" }, "Próximos avisos (si no haces nada)"),
+      upcoming,
+      h("p", { class: "hint small" }, "Con la app cerrada del todo un navegador no puede avisar sin un servidor. En la versión APK estos mismos horarios se programan en el teléfono."),
+    ];
   }
 
   private download(): void {

@@ -19,13 +19,14 @@ Abre `http://localhost:5173/` en el navegador. Para verlo como en el teléfono, 
 
 ```console
 $ npm test
- ✓ tests/persona.test.ts (17 tests) 40ms
- ✓ tests/engine.test.ts (17 tests) 145ms
-
- Test Files  3 passed (3)
-      Tests  41 passed (41)
-   Start at  11:14:19
-   Duration  409ms (transform 133ms, setup 0ms, collect 214ms, tests 194ms, environment 0ms, prepare 198ms)
+ ✓ tests/store.test.ts (7 tests) 6ms
+ ✓ tests/notify.test.ts (13 tests) 27ms
+ ✓ tests/persona.test.ts (17 tests) 43ms
+ ✓ tests/engine.test.ts (17 tests) 164ms
+ Test Files  4 passed (4)
+      Tests  54 passed (54)
+   Start at  18:13:54
+   Duration  547ms (transform 233ms, setup 0ms, collect 375ms, tests 239ms, environment 1ms, prepare 227ms)
 ```
 
 ### Levantar la app para desarrollar
@@ -95,6 +96,31 @@ Probado el 24 de septiembre de 2026 contra un endpoint local de prueba que habla
 
 **NO PROBADO** con un proveedor real (OpenRouter, NVIDIA, OpenAI, Ollama): en esta máquina no había clave configurada ni modelo local descargado. Lo que sí quedó comprobado es que la clave viaja solo en el header `Authorization`, nunca en el cuerpo de la petición ni en el save.
 
+## Avisos
+
+Ajustes → **Avisos** → marca **Avisarme** y acepta el permiso del navegador.
+
+- Te avisa cuando **empieza** una necesidad (hambre, suciedad, enfermedad, sueño, soledad), cuando despierta y cuando sale del huevo. Un aviso por episodio: no te repite «tiene hambre» cada minuto.
+- Máximo un aviso cada 20 minutos; si hay varios, va primero el más urgente (enfermedad, luego eclosión, luego hambre…).
+- En **horas de silencio** (22:00 a 08:00 por defecto) los guarda y te los da al terminar el silencio, solo si sigue siendo cierto. Si ya le diste de comer, ese aviso se descarta.
+- Con la app **en pantalla** no avisa: ya lo estás viendo.
+
+**Próximos avisos** es una predicción del motor: simula hacia adelante qué pasaría si no haces nada. Salida real del 2026-09-24, con un huevo recién adoptado:
+
+```text
+🐣 ¡El huevo de TontoPT se abrió!   06:14 p.m.
+🍙 TontoPT tiene hambre             05:37 a.m. · llega a las 08:00
+🌙 TontoPT no puede más de sueño    07:52 a.m. · llega a las 08:00
+```
+
+Prueba de entrega del mismo día: con la app en segundo plano, el huevo eclosionó solo y el service worker mostró
+
+```json
+{ "title": "🐣 ¡El huevo de TontoPT se abrió!", "body": "Ven a conocer a tu criatura.", "tag": "hatch" }
+```
+
+**Con la app cerrada del todo no llegan avisos.** Una PWA sin servidor no puede despertarse sola. La predicción ya existe (`src/engine/forecast.ts`), así que en la versión APK esos horarios se programan como notificaciones locales del sistema. **NO PROBADO** en un teléfono físico.
+
 ## Respaldo
 
 Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. **Importar** lo carga en otro teléfono. El archivo lleva un checksum, así que uno editado a mano se rechaza con «el checksum no coincide».
@@ -119,3 +145,7 @@ Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. 
 5. **El reloj de debug se queda guardado.** Si usaste `+24 h` en el panel de debug, la app sigue viviendo adelantada hasta que pulses **Reloj real**.
 
 6. **Cambiar la hora del teléfono hacia atrás no hace nada.** El motor ignora un reloj que retrocede. Si lo adelantas mucho, solo se simulan 72 horas como máximo.
+
+7. **Android puede matar la pestaña en segundo plano.** Mientras el navegador conserve la app viva, avisa (Chrome revisa como mucho una vez por minuto en segundo plano). Si el sistema la cierra para ahorrar batería, deja de avisar hasta que la abras. Es la misma limitación de «app cerrada».
+
+8. **«Probar un aviso» no dice nada.** Si el permiso quedó bloqueado, el navegador ya no vuelve a preguntar: hay que desbloquearlo desde la configuración del sitio (el candado junto a la dirección). Por la IP de la red tampoco funciona (trampa 1).
