@@ -257,5 +257,5 @@ Ajustes → **Exportar respaldo** descarga `tamagotchia-<nombre>-<fecha>.json`. 
 
 10. **Los avisos de la app pueden llegar tarde.** Android 12 y posteriores piden permiso de «Alarmas y recordatorios» para avisar a la hora exacta; sin él, y con el ahorro de batería activo, Android puede agruparlos o retrasarlos. **NO PROBADO** en un teléfono físico.
 
-11. **Con un Apple ID gratuito la app dura 7 días.** Después deja de abrir hasta que la vuelvas a firmar con iloader (la partida no se borra al reinstalar encima). Además, una cuenta gratuita solo puede tener 3 apps firmadas a la vez; si ya tienes la probe y otras, quita una.
+11. **Con un Apple ID gratuito la app dura 7 días.** Después deja de abrir hasta que la vuelvas a firmar con iloader. Reinstalar encima con la misma cuenta normalmente conserva la partida (NO PROBADO): exporta un respaldo antes por si acaso. Además, una cuenta gratuita solo puede tener 3 apps firmadas a la vez; si ya tienes la probe y otras, quita una.
 12. **Si iloader rechaza el bundle id** `io.github.dannybaanks.tamagotchia` (porque ya está registrado en otra cuenta), deja que le cambie el id. La partida vive dentro de la app: con otro id, cuenta como otra app.
