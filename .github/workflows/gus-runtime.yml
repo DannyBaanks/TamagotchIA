@@ -3,7 +3,7 @@
 name: GUS local (runtime vendorizado)
 on:
   push:
-    paths: [vendor/gus-runtime/**, native/**, tools/**, src/**, tests/**, package.json, package-lock.json, vite.config.ts, .github/workflows/gus-runtime.yml]
+    paths: [vendor/gus-runtime/**, native/**, tools/**, android/**, src/**, tests/**, package.json, package-lock.json, vite.config.ts, .github/workflows/gus-runtime.yml]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -77,3 +77,45 @@ jobs:
           grep -E "Maximum resident|Exit status" gus-smoke/time.txt || true
       - name: Invariants (process ok, output non-empty, UTF-8, no control tokens, reload after destroy)
         run: npx vite-node tools/gus-smoke/check.ts gus-smoke gus-smoke/smoke.json | tee -a "$GITHUB_STEP_SUMMARY"
+
+  android:
+    name: Android APK (arm64, GusLocal + runtime vendorizado vía NDK)
+    needs: vendor
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: gradle/actions/setup-gradle@v4
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync android
+      - name: NDK on the runner
+        id: ndk
+        run: |
+          NDK="${ANDROID_NDK_LATEST_HOME:-$ANDROID_NDK_HOME}"
+          echo "NDK: $NDK"
+          echo "version=$(basename "$NDK")" >> "$GITHUB_OUTPUT"
+      - name: Assemble debug APK
+        working-directory: android
+        run: ./gradlew :app:assembleDebug -Pgus.ndkVersion=${{ steps.ndk.outputs.version }} --stacktrace
+      - name: The APK carries the local brain, and no model weights
+        run: |
+          APK=$(find android/app/build/outputs/apk/debug -name "*.apk" | head -1)
+          test -n "$APK" || { echo "::error::APK not found"; exit 1; }
+          unzip -l "$APK" | grep -E "lib/arm64-v8a/libtama_gus.so" || { echo "::error::libtama_gus.so missing"; exit 1; }
+          if unzip -l "$APK" | grep -qi "\.gguf"; then echo "::error::model weights must not be bundled"; exit 1; fi
+          mkdir -p dist && cp "$APK" dist/TamagotchIA-gus-debug.apk
+          (cd dist && sha256sum TamagotchIA-gus-debug.apk | tee SHA256SUMS.txt)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TamagotchIA-gus-android-apk
+          path: dist/
+          retention-days: 14
