@@ -5,6 +5,7 @@
  */
 import { SYSTEM_PROMPT, validateReply, type PersonaInput, type PersonaReply } from "./contract";
 import { fallbackReply } from "./fallback";
+import { remoteMind, type CreatureMind, type MindRequest } from "./mind";
 
 export interface PersonalityProvider {
   readonly name: string;
@@ -88,12 +89,24 @@ export async function narrate(
   timeoutMs: number,
   clock: () => number = Date.now,
 ): Promise<Narration> {
-  if (!provider) return { reply: fallbackReply(input, seq), source: "fallback", problem: null, latencyMs: null };
+  return speak(provider ? remoteMind(provider) : null, { turn: input, box: null }, seq, timeoutMs, clock);
+}
+
+/** Any mind, same contract: validated reply or the local voice. Never touches the world. */
+export async function speak(
+  mind: CreatureMind | null,
+  request: MindRequest,
+  seq: number,
+  timeoutMs: number,
+  clock: () => number = Date.now,
+): Promise<Narration> {
+  const input = request.turn;
+  if (!mind) return { reply: fallbackReply(input, seq), source: "fallback", problem: null, latencyMs: null };
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), timeoutMs);
   const started = clock();
   try {
-    const raw = await provider.react(input, controller.signal);
+    const raw = await mind.respond(request, controller.signal);
     const checked = validateReply(raw);
     if (checked.ok) return { reply: checked.reply, source: "model", problem: null, latencyMs: clock() - started };
     return { reply: fallbackReply(input, seq), source: "fallback", problem: `respuesta inválida: ${checked.error}`, latencyMs: clock() - started };
