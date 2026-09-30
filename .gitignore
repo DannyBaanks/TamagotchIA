@@ -9,3 +9,6 @@ coverage/
 android/app/src/main/assets/public/
 android/app/src/main/assets/capacitor.config.json
 __pycache__/
+
+# llama.cpp builds made by vendor/gus-runtime/scripts/build-llama-xcframework.sh
+vendor/gus-runtime/.build/
