@@ -5,6 +5,7 @@
  * The API key is stored under its own key and never enters a save or an export.
  */
 import { hashString } from "../engine/random";
+import { RULESET_VERSION } from "../engine/rules";
 import { STAT_KEYS, type Stage, type World } from "../engine/types";
 
 export interface KeyValueStore {
@@ -15,6 +16,11 @@ export interface KeyValueStore {
 
 export const SAVE_KEY = "tamagotchia.save.v1";
 export const BACKUP_KEY = "tamagotchia.save.v1.bak";
+/**
+ * The first save read in the old (world v1) format, kept untouched so a rollback to an
+ * older app build can restore it. Written once, never overwritten.
+ */
+export const PREMIGRATION_KEY = "tamagotchia.save.v1.premigration";
 const FORMAT = "tamagotchia-save";
 
 interface Envelope {
@@ -26,8 +32,8 @@ interface Envelope {
 }
 
 export type LoadResult =
-  | { world: World; source: "save" | "backup"; problem: string | null }
-  | { world: null; source: "none"; problem: string | null };
+  | { world: World; source: "save" | "backup"; problem: string | null; migratedFrom: 1 | null }
+  | { world: null; source: "none"; problem: string | null; migratedFrom: null };
 
 const STAGES: Stage[] = ["egg", "baby", "child", "adult"];
 
@@ -35,7 +41,8 @@ const STAGES: Stage[] = ["egg", "baby", "child", "adult"];
 export function validWorld(value: unknown): value is World {
   if (!value || typeof value !== "object") return false;
   const w = value as World;
-  if (w.version !== 1 || !Array.isArray(w.events) || !Array.isArray(w.memories) || !Array.isArray(w.processedCommands)) return false;
+  if (w.version !== 2 || (w.mode !== "local" && w.mode !== "canon") || typeof w.rulesetVersion !== "string" || !w.rulesetVersion) return false;
+  if (!Array.isArray(w.events) || !Array.isArray(w.memories) || !Array.isArray(w.processedCommands)) return false;
   if (typeof w.seq !== "number" || !w.creature || typeof w.creature !== "object") return false;
   const c = w.creature;
   if (typeof c.name !== "string" || typeof c.lastTickAt !== "number" || !Number.isFinite(c.lastTickAt)) return false;
@@ -48,18 +55,34 @@ export function serialize(world: World, now: number): string {
   return JSON.stringify(envelope);
 }
 
-export function parse(text: string | null): { world: World | null; problem: string | null } {
-  if (!text) return { world: null, problem: null };
+/**
+ * World v1 → v2. A v1 world never lived under Canon rules, so it becomes "local":
+ * Canon is born Canon, never granted by a migration. Anything else is left as is and
+ * rejected by validWorld.
+ */
+export function migrateWorld(value: unknown): { world: unknown; migratedFrom: 1 | null } {
+  if (value && typeof value === "object" && (value as { version?: unknown }).version === 1) {
+    const { version: _old, ...rest } = value as Record<string, unknown>;
+    // Forced fields go last: a v1 file that smuggles in `mode: "canon"` still becomes local.
+    return { world: { ...rest, version: 2, mode: "local", rulesetVersion: RULESET_VERSION }, migratedFrom: 1 };
+  }
+  return { world: value, migratedFrom: null };
+}
+
+export function parse(text: string | null): { world: World | null; problem: string | null; migratedFrom: 1 | null } {
+  if (!text) return { world: null, problem: null, migratedFrom: null };
   let envelope: Envelope;
   try {
     envelope = JSON.parse(text) as Envelope;
   } catch {
-    return { world: null, problem: "el archivo no es JSON" };
+    return { world: null, problem: "el archivo no es JSON", migratedFrom: null };
   }
-  if (envelope?.format !== FORMAT || envelope.version !== 1) return { world: null, problem: "formato o versión desconocidos" };
-  if (hashString(JSON.stringify(envelope.world)) !== envelope.checksum) return { world: null, problem: "el checksum no coincide" };
-  if (!validWorld(envelope.world)) return { world: null, problem: "los datos no tienen la forma esperada" };
-  return { world: envelope.world, problem: null };
+  if (envelope?.format !== FORMAT || envelope.version !== 1) return { world: null, problem: "formato o versión desconocidos", migratedFrom: null };
+  // The checksum covers the world exactly as it was written, before any migration.
+  if (hashString(JSON.stringify(envelope.world)) !== envelope.checksum) return { world: null, problem: "el checksum no coincide", migratedFrom: null };
+  const { world, migratedFrom } = migrateWorld(envelope.world);
+  if (!validWorld(world)) return { world: null, problem: "los datos no tienen la forma esperada", migratedFrom: null };
+  return { world, problem: null, migratedFrom };
 }
 
 export function save(store: KeyValueStore, world: World, now: number): void {
@@ -69,11 +92,23 @@ export function save(store: KeyValueStore, world: World, now: number): void {
 }
 
 export function load(store: KeyValueStore): LoadResult {
-  const main = parse(store.getItem(SAVE_KEY));
-  if (main.world) return { world: main.world, source: "save", problem: null };
-  const backup = parse(store.getItem(BACKUP_KEY));
-  if (backup.world) return { world: backup.world, source: "backup", problem: main.problem ?? "no había partida principal" };
-  return { world: null, source: "none", problem: main.problem ?? backup.problem };
+  const mainText = store.getItem(SAVE_KEY);
+  const main = parse(mainText);
+  if (main.world) {
+    keepPremigration(store, mainText, main.migratedFrom);
+    return { world: main.world, source: "save", problem: null, migratedFrom: main.migratedFrom };
+  }
+  const backupText = store.getItem(BACKUP_KEY);
+  const backup = parse(backupText);
+  if (backup.world) {
+    keepPremigration(store, backupText, backup.migratedFrom);
+    return { world: backup.world, source: "backup", problem: main.problem ?? "no había partida principal", migratedFrom: backup.migratedFrom };
+  }
+  return { world: null, source: "none", problem: main.problem ?? backup.problem, migratedFrom: null };
+}
+
+function keepPremigration(store: KeyValueStore, text: string | null, migratedFrom: 1 | null): void {
+  if (migratedFrom !== null && text && !store.getItem(PREMIGRATION_KEY)) store.setItem(PREMIGRATION_KEY, text);
 }
 
 /** A file the player can keep. Same envelope as the save, so import is just parse(). */
@@ -82,7 +117,8 @@ export function exportSave(world: World, now: number): string {
 }
 
 export function importSave(text: string): { world: World | null; problem: string | null } {
-  return parse(text);
+  const { world, problem } = parse(text);
+  return { world, problem };
 }
 
 export function wipe(store: KeyValueStore): void {

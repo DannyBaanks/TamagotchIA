@@ -91,8 +91,17 @@ export interface Memory {
   expiresAt: number | null;
 }
 
+/**
+ * local: the lab. Anything may be tried there, and it never counts for competition.
+ * canon: bred under the rules. It is born canon and never comes back from local.
+ */
+export type WorldMode = "local" | "canon";
+
 export interface World {
-  version: 1;
+  version: 2;
+  mode: WorldMode;
+  /** The rules this world lives under (rules.ts RULESET_VERSION when created). */
+  rulesetVersion: string;
   creature: Creature;
   events: GameEvent[];
   memories: Memory[];

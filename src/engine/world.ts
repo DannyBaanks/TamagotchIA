@@ -1,7 +1,7 @@
 import { rememberEvent } from "./memory";
 import { prng } from "./random";
-import { MAX_EVENTS, MAX_MEMORIES } from "./rules";
-import { FOODS, STAT_KEYS, type Creature, type EventKind, type GameEvent, type Stats, type World } from "./types";
+import { MAX_EVENTS, MAX_MEMORIES, RULESET_VERSION } from "./rules";
+import { FOODS, STAT_KEYS, type Creature, type EventKind, type GameEvent, type Stats, type World, type WorldMode } from "./types";
 
 export function clamp(value: number): number {
   return Math.min(100, Math.max(0, value));
@@ -11,7 +11,7 @@ export function clampStats(stats: Stats): void {
   for (const key of STAT_KEYS) stats[key] = clamp(stats[key]);
 }
 
-export function createWorld(name: string, species: string, now: number, seed: number): World {
+export function createWorld(name: string, species: string, now: number, seed: number, mode: WorldMode = "local"): World {
   const rand = prng(seed);
   const creature: Creature = {
     id: `c-${seed.toString(36)}`,
@@ -37,7 +37,7 @@ export function createWorld(name: string, species: string, now: number, seed: nu
     lastPetAt: 0,
     miniGameWins: 0,
   };
-  const world: World = { version: 1, creature, events: [], memories: [], seq: 0, processedCommands: [] };
+  const world: World = { version: 2, mode, rulesetVersion: RULESET_VERSION, creature, events: [], memories: [], seq: 0, processedCommands: [] };
   emit(world, now, "CREATURE_CREATED", { name: creature.name, species });
   return world;
 }
