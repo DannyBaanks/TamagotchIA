@@ -1,9 +1,9 @@
 # The local GUS brain: the vendored runtime must match its pinned upstream, and the app
-# must keep working without it. Native builds and the inference smoke join this file in M3.4.
+# must keep working without it. The desktop smoke runs a real model through the vendored bridge.
 name: GUS local (runtime vendorizado)
 on:
   push:
-    paths: [vendor/gus-runtime/**, tools/sync-gus-runtime.mjs, src/**, tests/**, package.json, package-lock.json, vite.config.ts, .github/workflows/gus-runtime.yml]
+    paths: [vendor/gus-runtime/**, native/**, tools/**, src/**, tests/**, package.json, package-lock.json, vite.config.ts, .github/workflows/gus-runtime.yml]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -26,3 +26,54 @@ jobs:
         run: node tools/sync-gus-runtime.mjs --verify
       - name: Drift — regenerate the pinned iSyCodeMovil commit and compare byte for byte
         run: node tools/sync-gus-runtime.mjs --check
+
+  native-smoke:
+    name: Smoke nativo (bridge vendorizado + llama.cpp fijado + modelo real)
+    needs: vendor
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: llama.cpp commit from VENDOR.json
+        id: pin
+        run: echo "llama=$(node -p "require('./vendor/gus-runtime/VENDOR.json').llama_cpp_commit")" >> "$GITHUB_OUTPUT"
+      - name: Cache llama.cpp build
+        id: cache
+        uses: actions/cache@v4
+        with:
+          path: llama.cpp
+          key: llama-linux-static-${{ steps.pin.outputs.llama }}-portable-v1
+      - name: Build llama.cpp (static, portable CPU)
+        if: steps.cache.outputs.cache-hit != 'true'
+        run: |
+          git clone --filter=blob:none --no-checkout https://github.com/ggml-org/llama.cpp.git llama.cpp
+          git -C llama.cpp checkout --detach "${{ steps.pin.outputs.llama }}"
+          # GGML_NATIVE=OFF: a cached build must run on any runner CPU (iSyCode lesson: SIGILL).
+          cmake -S llama.cpp -B llama.cpp/build -DBUILD_SHARED_LIBS=OFF -DLLAMA_CURL=OFF -DGGML_NATIVE=OFF \
+            -DLLAMA_BUILD_TESTS=OFF -DLLAMA_BUILD_EXAMPLES=OFF -DLLAMA_BUILD_SERVER=OFF -DCMAKE_BUILD_TYPE=Release
+          cmake --build llama.cpp/build --target llama -j"$(nproc)"
+      - name: Build the smoke against the vendored bridge (-Werror)
+        run: native/gus-smoke/build.sh "$PWD/llama.cpp" dist-native/gus_smoke
+      - name: Download the frozen model and verify it
+        run: |
+          set -euo pipefail
+          M=native/gus-smoke/model.json
+          url="https://huggingface.co/$(node -p "require('./$M').repository")/resolve/$(node -p "require('./$M').revision")/$(node -p "require('./$M').filename")"
+          curl -fL --retry 4 --retry-delay 5 -o model.gguf "$url"
+          echo "$(node -p "require('./$M').sha256")  model.gguf" | sha256sum -c -
+          test "$(stat -c %s model.gguf)" = "$(node -p "require('./$M').bytes")"
+      - name: Compose the chat exactly as the app does (real creature, compiled Context Box)
+        run: npx vite-node tools/gus-smoke/input.ts gus-smoke
+      - name: Generate
+        run: |
+          set -o pipefail
+          /usr/bin/time -v dist-native/gus_smoke model.gguf gus-smoke/system.txt gus-smoke/user.txt gus-smoke > gus-smoke/smoke.json 2> gus-smoke/time.txt || true
+          cat gus-smoke/smoke.json
+          grep -E "Maximum resident|Exit status" gus-smoke/time.txt || true
+      - name: Invariants (process ok, output non-empty, UTF-8, no control tokens, reload after destroy)
+        run: npx vite-node tools/gus-smoke/check.ts gus-smoke gus-smoke/smoke.json | tee -a "$GITHUB_STEP_SUMMARY"
