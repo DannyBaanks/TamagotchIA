@@ -3,7 +3,7 @@
 name: GUS local (runtime vendorizado)
 on:
   push:
-    paths: [vendor/gus-runtime/**, native/**, tools/**, android/**, src/**, tests/**, package.json, package-lock.json, vite.config.ts, .github/workflows/gus-runtime.yml]
+    paths: [vendor/gus-runtime/**, native/**, tools/**, android/**, ios/**, src/**, tests/**, package.json, package-lock.json, vite.config.ts, .github/workflows/gus-runtime.yml]
   pull_request:
   workflow_dispatch:
 permissions:
@@ -119,3 +119,54 @@ jobs:
           name: TamagotchIA-gus-android-apk
           path: dist/
           retention-days: 14
+
+  ios:
+    name: iOS (GusLocal + llama.xcframework fijado, sin firmar)
+    needs: vendor
+    runs-on: macos-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npx cap sync ios
+      - name: llama.cpp commit from VENDOR.json
+        id: llama
+        run: echo "commit=$(node -p "require('./vendor/gus-runtime/VENDOR.json').llama_cpp_commit")" >> "$GITHUB_OUTPUT"
+      - name: Cache llama.xcframework
+        id: xcf
+        uses: actions/cache@v4
+        with:
+          path: vendor/gus-runtime/.build/llama
+          key: llama-xcframework-${{ steps.llama.outputs.commit }}-v1
+      - name: Build llama.xcframework with the vendored script (pinned commit)
+        if: steps.xcf.outputs.cache-hit != 'true'
+        run: bash vendor/gus-runtime/scripts/build-llama-xcframework.sh
+      - name: Place llama.xcframework for the GusLocal package
+        run: |
+          rm -rf ios/App/GusLocal/llama.xcframework
+          cp -R vendor/gus-runtime/.build/llama/llama.xcframework ios/App/GusLocal/llama.xcframework
+          test -L ios/App/GusLocal/Sources/GUSBridge/GUSLlamaBridge.c || { echo "::error::bridge symlink lost"; exit 1; }
+          cmp ios/App/GusLocal/Sources/GUSBridge/GUSLlamaBridge.c vendor/gus-runtime/Sources/Model/GUSLlamaBridge.c
+      - name: Build unsigned (device)
+        run: |
+          set -o pipefail
+          xcodebuild -project ios/App/App.xcodeproj -scheme App -configuration Debug \
+            -sdk iphoneos -destination 'generic/platform=iOS' -derivedDataPath /tmp/tama_gus_dd \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY="" build 2>&1 | tee build.log | tail -40
+      - name: The app links the local brain
+        run: |
+          APP=$(find /tmp/tama_gus_dd/Build/Products -maxdepth 2 -name "App.app" -type d | head -1)
+          test -n "$APP" || { echo "::error::no App.app"; exit 1; }
+          nm -g "$APP/App" 2>/dev/null | grep -q "gus_llama_generate_chat_sampled" || find "$APP" -name "*.framework" | head
+          grep -q "GusLocalPlugin" build.log && echo "GusLocalPlugin compiled"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ios-gus-build-log
+          path: build.log
+          retention-days: 7

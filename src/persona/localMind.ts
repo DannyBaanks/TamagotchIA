@@ -19,9 +19,17 @@ export interface GusGenerateOptions {
   maxTokens: number;
 }
 
-/** Implemented natively (M3.4: Android and iOS); the native side only formats and generates. */
+/**
+ * Implemented natively: android/…/GusLocalPlugin.java and ios/App/GusLocal. The native side
+ * only formats and generates. Models are named by file name inside the app's own models
+ * folder, never by path. Rejections carry a code: RUNTIME_MISSING, BAD_MODEL,
+ * MODEL_MISSING, LOAD_FAILED, NOT_LOADED, BAD_REQUEST, GENERATE_FAILED.
+ */
 export interface GusLocalPlugin {
   generate(options: GusGenerateOptions): Promise<{ text: string }>;
+  load?(options: { model: string; contextTokens?: number }): Promise<{ model: string }>;
+  cancel?(): Promise<void>;
+  unload?(): Promise<void>;
 }
 
 /**

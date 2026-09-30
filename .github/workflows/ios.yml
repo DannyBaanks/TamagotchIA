@@ -5,7 +5,7 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    paths: [ios/**, src/**, public/**, package.json, package-lock.json, capacitor.config.ts, .github/workflows/ios.yml]
+    paths: [ios/**, src/**, public/**, vendor/gus-runtime/**, package.json, package-lock.json, capacitor.config.ts, .github/workflows/ios.yml]
 jobs:
   build-ipa:
     runs-on: macos-latest
@@ -20,6 +20,24 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npx cap sync ios
+      - name: llama.cpp commit from VENDOR.json
+        id: llama
+        run: echo "commit=$(node -p "require('./vendor/gus-runtime/VENDOR.json').llama_cpp_commit")" >> "$GITHUB_OUTPUT"
+      - name: Cache llama.xcframework
+        id: xcf
+        uses: actions/cache@v4
+        with:
+          path: vendor/gus-runtime/.build/llama
+          key: llama-xcframework-${{ steps.llama.outputs.commit }}-v1
+      - name: Build llama.xcframework with the vendored script (pinned commit)
+        if: steps.xcf.outputs.cache-hit != 'true'
+        run: bash vendor/gus-runtime/scripts/build-llama-xcframework.sh
+      - name: Place llama.xcframework for the GusLocal package
+        run: |
+          rm -rf ios/App/GusLocal/llama.xcframework
+          cp -R vendor/gus-runtime/.build/llama/llama.xcframework ios/App/GusLocal/llama.xcframework
+          test -L ios/App/GusLocal/Sources/GUSBridge/GUSLlamaBridge.c || { echo "::error::bridge symlink lost"; exit 1; }
+          cmp ios/App/GusLocal/Sources/GUSBridge/GUSLlamaBridge.c vendor/gus-runtime/Sources/Model/GUSLlamaBridge.c
       - name: Xcode version
         run: xcodebuild -version
       - name: Build unsigned
