@@ -52,3 +52,45 @@ describe("local GUS plugin boundary", () => {
     expect(await speak(weird, request(), 1, 1000)).toMatchObject({ source: "fallback", problem: "el runtime local no devolvió texto" });
   });
 });
+
+import { MemoryStore, load, save } from "../src/store/save";
+
+describe("local GUS adapter: every failure is the local voice, never a broken save", () => {
+  const rejecting = (code: string, message: string) =>
+    localMind({ generate: async () => { throw Object.assign(new Error(message), { code }); } });
+
+  it("plugin not in this build, model missing, not loaded, load or generation failure", async () => {
+    for (const [code, message] of [
+      ["RUNTIME_MISSING", "GUS local no está en este build"],
+      ["UNIMPLEMENTED", "\"GusLocal\" plugin is not implemented on web"],
+      ["MODEL_MISSING", "El modelo no está instalado."],
+      ["NOT_LOADED", "No hay modelo cargado."],
+      ["GENERATE_FAILED", "llama_decode failed"],
+    ] as const) {
+      const n = await speak(rejecting(code, message), request(), 7, 1000);
+      expect(n.source).toBe("fallback");
+      expect(n.problem).toBe(message);
+      expect(n.reply.speech.split(/\s+/).length).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("empty or malformed output falls back; valid UTF-8 with emoji passes through untouched", async () => {
+    for (const text of ["", "   ", "��", "{\"speech\": \"hola\"", "<|im_start|>assistant"]) {
+      expect((await speak(localMind({ generate: async () => ({ text }) }), request(), 1, 1000)).source).toBe("fallback");
+    }
+    const emoji = '{"speech":"¡Pescado otra vez! 🐟 Me encanta, ñam.","emotion":"happy","intent":"comment","animation":"eating","memory_candidate":null}';
+    const n = await speak(localMind({ generate: async () => ({ text: emoji }) }), request(), 1, 1000);
+    expect(n.source).toBe("model");
+    expect(n.reply.speech).toBe("¡Pescado otra vez! 🐟 Me encanta, ñam.");
+  });
+
+  it("a timeout cancels the wait and the game keeps its state and its save", async () => {
+    const store = new MemoryStore();
+    save(store, world, now);
+    const before = store.getItem("tamagotchia.save.v1");
+    const n = await speak(localMind({ generate: () => new Promise(() => {}) }), request(), 1, 20);
+    expect(n).toMatchObject({ source: "fallback", problem: "sin respuesta en 20 ms" });
+    expect(store.getItem("tamagotchia.save.v1")).toBe(before);
+    expect(load(store).world).toEqual(world);
+  });
+});
