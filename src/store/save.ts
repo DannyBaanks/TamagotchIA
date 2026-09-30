@@ -78,6 +78,8 @@ export function parse(text: string | null): { world: World | null; problem: stri
     return { world: null, problem: "el archivo no es JSON", migratedFrom: null };
   }
   if (envelope?.format !== FORMAT || envelope.version !== 1) return { world: null, problem: "formato o versión desconocidos", migratedFrom: null };
+  // An envelope without a world used to crash hashString (JSON.stringify(undefined)).
+  if (!envelope.world || typeof envelope.world !== "object") return { world: null, problem: "el archivo no trae una partida", migratedFrom: null };
   // The checksum covers the world exactly as it was written, before any migration.
   if (hashString(JSON.stringify(envelope.world)) !== envelope.checksum) return { world: null, problem: "el checksum no coincide", migratedFrom: null };
   const { world, migratedFrom } = migrateWorld(envelope.world);
