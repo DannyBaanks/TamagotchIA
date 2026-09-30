@@ -1,6 +1,6 @@
 /**
  * The boundary to the native GUS runtime (llama.cpp on iOS/Android). Only strings cross
- * it: the system contract, the compiled Context Box as JSON and the turn as JSON. The
+ * it: a system message (contract + compiled Context Box) and a user message (the turn). The
  * plugin never receives the World, a store, settings or a secret, and has nothing to call
  * back into; whatever it returns is plain text for the validator.
  */
@@ -8,18 +8,32 @@ import { validateContextBox } from "./contextBox";
 import { SYSTEM_PROMPT } from "./contract";
 import type { CreatureMind } from "./mind";
 
+export interface GusMessage {
+  role: "system" | "user";
+  content: string;
+}
+
 export interface GusGenerateOptions {
-  system: string;
-  /** The compiled Context Box, JSON. */
-  context: string;
-  /** The current turn (event + what the player said), JSON. */
-  turn: string;
+  /** Already composed by composeLocalChat, so every native glue sends exactly the same chat. */
+  messages: GusMessage[];
   maxTokens: number;
 }
 
-/** Implemented natively (M3.3 iOS, M3.4 Android). */
+/** Implemented natively (M3.4: Android and iOS); the native side only formats and generates. */
 export interface GusLocalPlugin {
   generate(options: GusGenerateOptions): Promise<{ text: string }>;
+}
+
+/**
+ * The one place the local chat is composed. The system message carries the contract and
+ * the Context Box: both change slowly, so they form a prefix a runtime can reuse. The turn
+ * (event + what the player said) is the user message.
+ */
+export function composeLocalChat(boxJson: string, turnJson: string): GusMessage[] {
+  return [
+    { role: "system", content: `${SYSTEM_PROMPT}\n\nLo que sabes de ti (Context Box, JSON; solo lectura):\n${boxJson}` },
+    { role: "user", content: turnJson },
+  ];
 }
 
 export const LOCAL_MAX_TOKENS = 160;
@@ -34,9 +48,7 @@ export function localMind(plugin: GusLocalPlugin, name = "GUS local"): CreatureM
       if (!checked.ok) throw new Error(`context box rechazada: ${checked.error}`);
       if (signal.aborted) throw new Error("cancelado");
       const call = plugin.generate({
-        system: SYSTEM_PROMPT,
-        context: JSON.stringify(checked.box),
-        turn: JSON.stringify(request.turn),
+        messages: composeLocalChat(JSON.stringify(checked.box), JSON.stringify(request.turn)),
         maxTokens: LOCAL_MAX_TOKENS,
       });
       const aborted = new Promise<never>((_, reject) => {

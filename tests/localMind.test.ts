@@ -2,7 +2,7 @@ import * as R from "../src/engine/rules";
 import { simulateElapsed } from "../src/engine/simulation";
 import { createWorld } from "../src/engine/world";
 import { compileContextBox } from "../src/persona/compile";
-import { personaInput } from "../src/persona/contract";
+import { SYSTEM_PROMPT, personaInput } from "../src/persona/contract";
 import { validateContextBox } from "../src/persona/contextBox";
 import { LOCAL_MAX_TOKENS, localMind, type GusGenerateOptions } from "../src/persona/localMind";
 import { speak } from "../src/persona/providers";
@@ -20,13 +20,17 @@ describe("local GUS plugin boundary", () => {
     const n = await speak(mind, request(), 1, 1000);
     expect(n.source).toBe("model");
     const sent = calls[0]!;
-    expect(Object.keys(sent).sort()).toEqual(["context", "maxTokens", "system", "turn"]);
-    expect(typeof sent.system).toBe("string");
-    expect(typeof sent.context).toBe("string");
-    expect(typeof sent.turn).toBe("string");
+    expect(Object.keys(sent).sort()).toEqual(["maxTokens", "messages"]);
     expect(sent.maxTokens).toBe(LOCAL_MAX_TOKENS);
-    expect(validateContextBox(JSON.parse(sent.context)).ok).toBe(true);
-    expect(sent.context).not.toMatch(/processedCommands|"seed"|apiKey|baseUrl/);
+    expect(sent.messages.map((m) => m.role)).toEqual(["system", "user"]);
+    for (const m of sent.messages) expect(Object.keys(m).sort()).toEqual(["content", "role"]);
+    const system = sent.messages[0]!.content;
+    expect(system.startsWith(SYSTEM_PROMPT)).toBe(true);
+    const marker = "(Context Box, JSON; solo lectura):\n";
+    const boxJson = system.slice(system.indexOf(marker) + marker.length);
+    expect(validateContextBox(JSON.parse(boxJson)).ok).toBe(true);
+    expect(JSON.parse(sent.messages[1]!.content)).toEqual(request().turn);
+    expect(JSON.stringify(sent)).not.toMatch(/processedCommands|"seed"|apiKey|baseUrl/);
   });
 
   it("an invalid box never reaches the runtime", async () => {
