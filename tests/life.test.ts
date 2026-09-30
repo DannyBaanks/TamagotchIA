@@ -33,3 +33,39 @@ describe("PetIdentity", () => {
     expect(world.creature.name).toBe("Malbolgato");
   });
 });
+
+import { lifeLog } from "../src/life/lifelog";
+import { MAX_EVENTS, RULESET_VERSION } from "../src/engine/rules";
+
+describe("LifeLog", () => {
+  it("records engine events in order, each with its provenance and ruleset", () => {
+    const world = applyCommand(hatched(), { id: "c1", kind: "feed", food: "fish" }, T0 + R.HATCH_MS + R.HOUR).world;
+    const log = lifeLog(world);
+    expect(log.creatureId).toBe(world.creature.id);
+    expect(log.entries.map((e) => e.kind)).toEqual(world.events.map((e) => e.kind));
+    expect(log.entries.every((e) => e.provenance.source === "engine" && e.provenance.ruleset === RULESET_VERSION)).toBe(true);
+    const seqs = log.entries.map((e) => e.seq);
+    expect(seqs).toEqual([...seqs].sort((a, b) => a - b));
+    expect(log.droppedBefore).toBeNull();
+  });
+
+  it("says when old events were trimmed instead of pretending to be the whole life", () => {
+    let world = hatched();
+    let now = T0 + R.HATCH_MS;
+    for (let i = 0; i < MAX_EVENTS + 20; i++) {
+      now += R.MINUTE;
+      world = applyCommand(world, { id: `t${i}`, kind: "talk" }, now).world;
+    }
+    const log = lifeLog(world);
+    expect(log.entries.length).toBe(MAX_EVENTS);
+    expect(log.droppedBefore).toBe(log.entries[0]!.seq);
+    expect(log.droppedBefore).toBeGreaterThan(1);
+  });
+
+  it("is a copy: editing an entry cannot reach the world", () => {
+    const world = hatched();
+    const log = lifeLog(world);
+    log.entries[0]!.payload.name = "otro";
+    expect(world.events[0]!.payload.name).toBe("Malbolgato");
+  });
+});

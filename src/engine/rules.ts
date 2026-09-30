@@ -4,6 +4,12 @@
  */
 import type { Food } from "./types";
 
+/**
+ * Names the rules below. Bump it whenever a number or rule changes, so history written
+ * under old rules is never mistaken for history under new ones.
+ */
+export const RULESET_VERSION = "tamagotchia-rules-1";
+
 export const HOUR = 3_600_000;
 export const MINUTE = 60_000;
 
