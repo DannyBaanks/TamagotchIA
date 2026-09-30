@@ -165,7 +165,8 @@ export function verify(dest = DEFAULT_DEST) {
     if (!existsSync(path)) { problems.push(`${f.dest} is missing`); continue; }
     if (sha256(readFileSync(path)) !== f.sha256) problems.push(`${f.dest} was modified (sha256 differs from ${MANIFEST})`);
   }
-  for (const extra of listFiles(dest).filter((p) => !expected.has(p))) problems.push(`${extra} is not part of the snapshot`);
+  // .build/ is the gitignored llama.xcframework output of the vendored build script, not source.
+  for (const extra of listFiles(dest).filter((p) => !expected.has(p) && !p.startsWith(".build/"))) problems.push(`${extra} is not part of the snapshot`);
   if (existsSync(join(dest, README)) && readFileSync(join(dest, README), "utf8") !== readmeText(manifest)) {
     problems.push(`${README} was modified`);
   }

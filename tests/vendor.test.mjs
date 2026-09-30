@@ -95,9 +95,12 @@ describe("sync-gus-runtime", () => {
     manifest.files[0].sha256 = "0".repeat(64);
     writeFileSync(join(dest, "VENDOR.json"), JSON.stringify(manifest, null, 2) + "\n");
     writeFileSync(join(dest, "patch.c"), "int extra;\n");
+    mkdirSync(join(dest, ".build", "llama"), { recursive: true });
+    writeFileSync(join(dest, ".build", "llama", "SOURCE_COMMIT"), "x\n"); // build output is ignored
     const problems = check({ source: up.dir, dest }).join("\n");
     expect(problems).toMatch(/VENDOR.json differs from the pinned upstream/);
     expect(problems).toMatch(/patch.c is not part of the snapshot/);
+    expect(problems).not.toMatch(/\.build/);
   });
 
   it("fails on an unexpected upstream layout instead of copying something else", () => {
