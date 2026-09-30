@@ -1,0 +1,28 @@
+# The local GUS brain: the vendored runtime must match its pinned upstream, and the app
+# must keep working without it. Native builds and the inference smoke join this file in M3.4.
+name: GUS local (runtime vendorizado)
+on:
+  push:
+    paths: [vendor/gus-runtime/**, tools/sync-gus-runtime.mjs, src/**, tests/**, package.json, package-lock.json, vite.config.ts, .github/workflows/gus-runtime.yml]
+  pull_request:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  vendor:
+    name: Tests + drift del runtime vendorizado
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - name: Offline — files match VENDOR.json
+        run: node tools/sync-gus-runtime.mjs --verify
+      - name: Drift — regenerate the pinned iSyCodeMovil commit and compare byte for byte
+        run: node tools/sync-gus-runtime.mjs --check
