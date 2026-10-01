@@ -144,14 +144,14 @@ describe("GUS local settings", () => {
 });
 
 import { readFileSync } from "node:fs";
-import { KNOWN_MODELS, describeImport, knownModelBySha } from "../src/persona/knownModels";
+import { KNOWN_MODELS, PINNED_SOURCE, describeImport, knownModelBySha, sourceUrl } from "../src/persona/knownModels";
 
 describe("known models", () => {
   it("match the model the native smoke actually ran (native/gus-smoke/model.json)", () => {
     const smoke = JSON.parse(readFileSync(new URL("../native/gus-smoke/model.json", import.meta.url), "utf8"));
     const known = KNOWN_MODELS.find((m) => m.id === smoke.id)!;
     expect(known).toMatchObject({ filename: smoke.filename, bytes: smoke.bytes, sha256: smoke.sha256 });
-    expect(known.source).toContain(smoke.revision);
+    expect(known).toMatchObject({ repository: smoke.repository, revision: smoke.revision, tested: "tamagotchia-smoke" });
     expect(isModelFileName(known.filename)).toBe(true);
   });
 
@@ -159,9 +159,43 @@ describe("known models", () => {
     const k = KNOWN_MODELS[0]!;
     expect(knownModelBySha(k.sha256.toUpperCase())).toBe(k);
     const ok = describeImport({ model: "renamed.gguf", bytes: k.bytes, sha256: k.sha256 });
-    expect(ok).toMatch(/probó el CI/);
+    expect(ok).toMatch(/probado en el CI de TamagotchIA/);
     expect(ok).toMatch(/todavía no está demostrado/);
     const other = describeImport({ model: k.filename, bytes: k.bytes, sha256: "0".repeat(64) });
-    expect(other).toMatch(/No es un modelo probado/);
+    expect(other).toMatch(/No es un modelo del catálogo/);
+  });
+});
+
+describe("model downloads only ever ask for a pinned Hugging Face file", () => {
+  it("every catalog URL is https://huggingface.co/<repo>/resolve/<40-hex>/<file>.gguf", () => {
+    for (const m of KNOWN_MODELS) {
+      const match = PINNED_SOURCE.exec(sourceUrl(m));
+      expect(match?.[1]).toBe(m.filename);
+      expect(m.sha256).toMatch(/^[0-9a-f]{64}$/);
+      expect(m.revision).toMatch(/^[0-9a-f]{40}$/);
+    }
+  });
+
+  it("rejects anything else: other hosts, branches instead of commits, paths, http", () => {
+    for (const bad of [
+      "https://evil.example/Qwen/x/resolve/9217f5db79a29953eb74d5343926648285ec7e67/m.gguf",
+      "https://huggingface.co/Qwen/x/resolve/main/m.gguf",
+      "https://huggingface.co/Qwen/x/resolve/9217f5db79a29953eb74d5343926648285ec7e67/../m.gguf",
+      "https://huggingface.co/Qwen/x/resolve/9217f5db79a29953eb74d5343926648285ec7e67/dir/m.gguf",
+      "http://huggingface.co/Qwen/x/resolve/9217f5db79a29953eb74d5343926648285ec7e67/m.gguf",
+      "https://huggingface.co.evil/Qwen/x/resolve/9217f5db79a29953eb74d5343926648285ec7e67/m.gguf",
+    ]) expect(PINNED_SOURCE.test(bad)).toBe(false);
+  });
+
+  it("the Android and iOS plugins enforce the same pattern and the same Hugging Face hosts", () => {
+    const java = readFileSync(new URL("../android/app/src/main/java/io/github/dannybaanks/tamagotchia/GusLocalPlugin.java", import.meta.url), "utf8");
+    const swift = readFileSync(new URL("../ios/App/GusLocal/Sources/GusLocalPlugin/GusLocalPlugin.swift", import.meta.url), "utf8");
+    const pattern = PINNED_SOURCE.source.replace(/\\\//g, "/");
+    expect(java.replace(/\\\\/g, "\\")).toContain(pattern);
+    expect(swift).toContain(pattern);
+    for (const host of ["huggingface.co", "us.aws.cdn.hf.co", "cdn-lfs.huggingface.co", "cas-bridge.xethub.hf.co"]) {
+      expect(java).toContain(`"${host}"`);
+      expect(swift).toContain(`"${host}"`);
+    }
   });
 });

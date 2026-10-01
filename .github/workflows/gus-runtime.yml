@@ -26,6 +26,8 @@ jobs:
         run: node tools/sync-gus-runtime.mjs --verify
       - name: Drift — regenerate the pinned iSyCodeMovil commit and compare byte for byte
         run: node tools/sync-gus-runtime.mjs --check
+      - name: Downloadable models are pinned exactly as in iSyCode Móvil's catalog (same commit)
+        run: npx vite-node tools/check-model-catalog.ts
 
   native-smoke:
     name: Smoke nativo (bridge vendorizado + llama.cpp fijado + modelo real)

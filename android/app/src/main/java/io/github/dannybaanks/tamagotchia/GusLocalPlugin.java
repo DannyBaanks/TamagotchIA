@@ -19,11 +19,18 @@ import com.getcapacitor.annotation.CapacitorPlugin;
 import org.json.JSONObject;
 
 import java.io.File;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.security.MessageDigest;
+import java.net.HttpURLConnection;
+import java.net.URL;
 import java.util.Arrays;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import java.nio.ByteBuffer;
 import java.nio.charset.CharsetDecoder;
 import java.nio.charset.CodingErrorAction;
@@ -59,6 +66,16 @@ public class GusLocalPlugin extends Plugin {
     private static final byte[] GGUF_MAGIC = { 'G', 'G', 'U', 'F' };
     /** Room left on the phone after a copy, so the game's own save never runs out of space. */
     private static final long SPACE_HEADROOM = 64L * 1024 * 1024;
+    /** Same hosts as iSyCode Móvil's ModelStore: every hop of a download must stay on them. */
+    private static final Set<String> ALLOWED_HOSTS = new HashSet<>(Arrays.asList(
+        "huggingface.co", "us.aws.cdn.hf.co", "cdn-lfs.huggingface.co", "cas-bridge.xethub.hf.co"));
+    /** Hugging Face, a pinned 40-hex revision, a bare file name. Nothing else is downloadable. */
+    private static final Pattern SOURCE = Pattern.compile(
+        "^https://huggingface\\.co/[A-Za-z0-9._-]+/[A-Za-z0-9._-]+/resolve/[0-9a-f]{40}/([A-Za-z0-9._-]+\\.gguf)$");
+    private static final long MAX_MODEL_BYTES = 8L * 1024 * 1024 * 1024;
+    private final ExecutorService net = Executors.newSingleThreadExecutor();
+    private volatile String downloading = null;
+    private volatile boolean cancelDownload = false;
     private long handle = 0;
     private String loadedModel = null;
 
@@ -173,6 +190,144 @@ public class GusLocalPlugin extends Plugin {
         });
     }
 
+    /**
+     * Downloads a pinned model from Hugging Face into the models folder, resuming a previous
+     * partial file. Usable only after its size and SHA-256 match what the caller pinned; the
+     * request carries nothing about the creature or the player.
+     */
+    @PluginMethod
+    public void downloadModel(PluginCall call) {
+        String url = call.getString("url");
+        String sha256 = call.getString("sha256");
+        Long bytes = call.getLong("bytes");
+        Matcher m = url == null ? null : SOURCE.matcher(url);
+        File target = m != null && m.matches() ? modelFile(m.group(1)) : null;
+        if (target == null || sha256 == null || !sha256.matches("^[0-9a-f]{64}$") || bytes == null || bytes <= 0 || bytes > MAX_MODEL_BYTES) {
+            call.reject("La descarga no corresponde a un modelo fijado de Hugging Face.", "BAD_SOURCE");
+            return;
+        }
+        if (downloading != null) { call.reject("Ya hay una descarga de modelo en curso.", "BUSY"); return; }
+        File dir = modelsDir();
+        if (!dir.isDirectory() && !dir.mkdirs()) { call.reject("No pude crear la carpeta de modelos.", "DOWNLOAD_FAILED"); return; }
+        File part = new File(dir, target.getName() + ".partial");
+        long have = part.isFile() && part.length() < bytes ? part.length() : 0L;
+        if (dir.getUsableSpace() < bytes - have + SPACE_HEADROOM) { call.reject("No hay espacio suficiente en el teléfono.", "NO_SPACE"); return; }
+        downloading = target.getName();
+        cancelDownload = false;
+        net.execute(() -> {
+            try {
+                fetch(url, part, bytes, target.getName());
+                if (cancelDownload) { call.reject("Descarga cancelada.", "CANCELLED"); return; }
+                if (part.length() != bytes) throw new IllegalStateException("La descarga quedó incompleta (" + part.length() + " de " + bytes + " bytes). Reintenta para continuar.");
+                String digest;
+                try (InputStream in = new FileInputStream(part)) { digest = sha256Of(in); }
+                if (!digest.equals(sha256)) {
+                    part.delete();
+                    call.reject("El SHA-256 no coincide. El modelo no se instaló.", "BAD_MODEL");
+                    return;
+                }
+                target.delete();
+                if (!part.renameTo(target)) throw new IllegalStateException("No pude guardar el modelo.");
+                JSObject ok = new JSObject();
+                ok.put("model", target.getName());
+                ok.put("bytes", bytes);
+                ok.put("sha256", digest);
+                call.resolve(ok);
+            } catch (SecurityException e) {
+                call.reject(e.getMessage(), "BAD_SOURCE");
+            } catch (Throwable t) {
+                // The partial file stays: the next attempt resumes it.
+                call.reject(cancelDownload ? "Descarga cancelada." : "Falló la descarga: " + (t.getMessage() == null ? "sin conexión" : t.getMessage()),
+                    cancelDownload ? "CANCELLED" : "DOWNLOAD_FAILED");
+            } finally {
+                downloading = null;
+            }
+        });
+    }
+
+    /** Follows redirects by hand so every hop is checked against ALLOWED_HOSTS. */
+    private void fetch(String source, File part, long expected, String name) throws Exception {
+        long offset = part.isFile() && part.length() < expected ? part.length() : 0L;
+        if (offset == 0L) part.delete();
+        URL url = new URL(source);
+        HttpURLConnection conn = null;
+        for (int hop = 0; hop < 8; hop++) {
+            if (!"https".equals(url.getProtocol()) || !ALLOWED_HOSTS.contains(url.getHost().toLowerCase())) {
+                throw new SecurityException("La descarga salió de los hosts aprobados de Hugging Face.");
+            }
+            conn = (HttpURLConnection) url.openConnection();
+            conn.setInstanceFollowRedirects(false);
+            conn.setConnectTimeout(30_000);
+            conn.setReadTimeout(60_000);
+            if (offset > 0) conn.setRequestProperty("Range", "bytes=" + offset + "-");
+            int code = conn.getResponseCode();
+            if (code >= 300 && code < 400) {
+                String location = conn.getHeaderField("Location");
+                conn.disconnect();
+                if (location == null) throw new IllegalStateException("Redirección sin destino.");
+                url = new URL(url, location);
+                continue;
+            }
+            break;
+        }
+        if (conn == null) throw new IllegalStateException("Sin respuesta.");
+        try {
+            int code = conn.getResponseCode();
+            if (code != 200 && code != 206) throw new IllegalStateException("El servidor respondió " + code + ".");
+            boolean append = offset > 0 && code == 206;
+            long written = append ? offset : 0L;
+            long lastReport = -1;
+            try (InputStream in = conn.getInputStream(); OutputStream out = new FileOutputStream(part, append)) {
+                byte[] buf = new byte[1 << 16];
+                int read;
+                while ((read = in.read(buf)) > 0) {
+                    if (cancelDownload) return;
+                    written += read;
+                    if (written > expected) { part.delete(); throw new IllegalStateException("El archivo es más grande que el aprobado."); }
+                    out.write(buf, 0, read);
+                    if (lastReport < 0 || written - lastReport >= 4L * 1024 * 1024 || written == expected) {
+                        lastReport = written;
+                        JSObject progress = new JSObject();
+                        progress.put("model", name);
+                        progress.put("received", written);
+                        progress.put("total", expected);
+                        notifyListeners("downloadProgress", progress);
+                    }
+                }
+            }
+        } finally {
+            conn.disconnect();
+        }
+    }
+
+    @PluginMethod
+    public void cancelDownload(PluginCall call) {
+        if (downloading != null) cancelDownload = true;
+        call.resolve();
+    }
+
+    /** Removes an installed model (and any partial download of it). Unloads it first if loaded. */
+    @PluginMethod
+    public void deleteModel(PluginCall call) {
+        File file = modelFile(call.getString("model"));
+        if (file == null) { call.reject("Nombre de modelo inválido.", "BAD_MODEL"); return; }
+        if (file.getName().equals(downloading)) { call.reject("Ese modelo se está descargando.", "BUSY"); return; }
+        lane.execute(() -> {
+            if (file.getName().equals(loadedModel) && handle != 0 && loadError == null) { nativeDestroy(handle); handle = 0; loadedModel = null; }
+            file.delete();
+            new File(file.getParentFile(), file.getName() + ".partial").delete();
+            call.resolve();
+        });
+    }
+
+    private static String sha256Of(InputStream in) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] buf = new byte[1 << 20];
+        int read;
+        while ((read = in.read(buf)) > 0) digest.update(buf, 0, read);
+        return hex(digest.digest());
+    }
+
     private static String hex(byte[] bytes) {
         StringBuilder sb = new StringBuilder(bytes.length * 2);
         for (byte b : bytes) sb.append(String.format("%02x", b));
@@ -258,6 +413,8 @@ public class GusLocalPlugin extends Plugin {
         });
         lane.shutdown();
         io.shutdownNow();
+        cancelDownload = true;
+        net.shutdownNow();
     }
 
     /** Output can end mid code point when max tokens is hit: replace, never throw. */

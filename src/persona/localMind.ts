@@ -23,7 +23,7 @@ export interface GusGenerateOptions {
  * Implemented natively: android/…/GusLocalPlugin.java and ios/App/GusLocal. The native side
  * only formats and generates. Models are named by file name inside the app's own models
  * folder, never by path. Rejections carry a code: RUNTIME_MISSING, BAD_MODEL,
- * MODEL_MISSING, LOAD_FAILED, NOT_LOADED, BAD_REQUEST, GENERATE_FAILED, and for imports CANCELLED, NO_SPACE, IMPORT_FAILED.
+ * MODEL_MISSING, LOAD_FAILED, NOT_LOADED, BAD_REQUEST, GENERATE_FAILED, and for imports and downloads CANCELLED, NO_SPACE, IMPORT_FAILED, BAD_SOURCE, BUSY, DOWNLOAD_FAILED.
  */
 export interface GusLocalPlugin {
   generate(options: GusGenerateOptions): Promise<{ text: string }>;
@@ -34,6 +34,15 @@ export interface GusLocalPlugin {
   listModels?(): Promise<{ models: Array<{ model: string; bytes: number }> }>;
   /** System file picker → copy into the models folder, platform SHA-256, GGUF magic checked. */
   importModel?(): Promise<{ model: string; bytes: number; sha256: string }>;
+  /**
+   * Downloads a pinned model (see knownModels.ts). The native side accepts only a Hugging Face
+   * URL with a 40-hex revision, follows redirects only to Hugging Face hosts, and installs the
+   * file only if size and SHA-256 match. The request carries nothing about the creature.
+   */
+  downloadModel?(options: { url: string; bytes: number; sha256: string }): Promise<{ model: string; bytes: number; sha256: string }>;
+  cancelDownload?(): Promise<void>;
+  deleteModel?(options: { model: string }): Promise<void>;
+  addListener?(event: "downloadProgress", listener: (progress: { model: string; received: number; total: number }) => void): Promise<{ remove: () => Promise<void> }>;
 }
 
 /**

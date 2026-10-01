@@ -13,7 +13,7 @@ import { copyWorld, createWorld, trimMemories } from "./engine/world";
 import { personaInput } from "./persona/contract";
 import { OpenAICompatibleProvider, type Narration, type PersonalityProvider } from "./persona/providers";
 import { forgetLocalMind, nativeGusPlugin, nativeLocalMind } from "./persona/nativeGus";
-import { KNOWN_MODELS, describeImport } from "./persona/knownModels";
+import { KNOWN_MODELS, describeImport, sizeLabel, sourceUrl, testedLabel, type KnownModel } from "./persona/knownModels";
 import { LOCAL_REQUIRES_NATIVE, routeMind, speakRouted, type Route } from "./persona/route";
 import { SPECIES, poseForAnimation, speciesById } from "./species";
 import { browserStore, exportSave, importSave, load, save, wipe } from "./store/save";
@@ -57,6 +57,10 @@ export class App {
   private notifyPrefs: NotifyPrefs;
   private preloadedSpecies: string | null = null;
   private notifyState: NotifyState;
+  /** A model download outlives the Settings sheet; the sheet only shows it. */
+  private gusDownload: { model: string; received: number; total: number } | null = null;
+  private gusProgressListening = false;
+  private onGusDownloadChange: (() => void) | null = null;
 
   constructor(private readonly root: HTMLElement) {
     const { store, persistent } = browserStore();
@@ -507,6 +511,51 @@ export class App {
     setTimeout(() => input.focus(), 50);
   }
 
+  private modelRow(m: KnownModel, present: boolean, act: { download: () => void; cancel: () => void; use: () => void; remove: () => void }): HTMLElement {
+    const busy = this.gusDownload;
+    const mine = busy?.model === m.filename;
+    const status = mine
+      ? `Descargando ${Math.floor((100 * busy!.received) / Math.max(1, busy!.total))} % (${sizeLabel(busy!.received)} de ${sizeLabel(busy!.total)})`
+      : present ? "Instalado" : `No descargado · ${sizeLabel(m.bytes)}`;
+    const buttons = mine
+      ? [h("button", { class: "btn", type: "button", onclick: act.cancel }, "Cancelar")]
+      : present
+        ? [h("button", { class: "btn primary", type: "button", onclick: act.use }, "Usar"), h("button", { class: "btn", type: "button", onclick: act.remove }, "Borrar")]
+        : [h("button", { class: "btn", type: "button", onclick: act.download, ...(busy ? { disabled: true } : {}) }, `Descargar (${sizeLabel(m.bytes)})`)];
+    return h("div", { class: "model-row" },
+      h("strong", {}, m.label),
+      h("p", { class: "hint small" }, `${status} · ${testedLabel(m)} · ${m.license}`),
+      h("div", { class: "row wrap" }, ...buttons));
+  }
+
+  private async downloadModel(m: KnownModel, out: HTMLElement): Promise<void> {
+    const gus = nativeGusPlugin();
+    if (!gus?.downloadModel) return void (out.textContent = LOCAL_REQUIRES_NATIVE);
+    if (this.gusDownload) return;
+    if (!this.gusProgressListening && gus.addListener) {
+      this.gusProgressListening = true;
+      await gus.addListener("downloadProgress", (p) => {
+        if (this.gusDownload?.model !== p.model) return;
+        this.gusDownload = p;
+        this.onGusDownloadChange?.();
+      });
+    }
+    this.gusDownload = { model: m.filename, received: 0, total: m.bytes };
+    this.onGusDownloadChange?.();
+    out.textContent = `Descargando ${m.label}…`;
+    try {
+      const done = await gus.downloadModel({ url: sourceUrl(m), bytes: m.bytes, sha256: m.sha256 });
+      forgetLocalMind();
+      out.textContent = `${describeImport(done)} Toca «Usar» para elegirlo.`;
+    } catch (error) {
+      const code = (error as { code?: string }).code;
+      out.textContent = code === "CANCELLED" ? "Descarga cancelada." : `No se descargó: ${error instanceof Error ? error.message : String(error)}`;
+    } finally {
+      this.gusDownload = null;
+      this.onGusDownloadChange?.();
+    }
+  }
+
   private openDiary(): void {
     const w = this.world;
     if (!w) return;
@@ -537,12 +586,38 @@ export class App {
     const localModel = h("input", { class: "field", value: s.localModel, placeholder: `p. ej. ${KNOWN_MODELS[0]!.filename}`, autocomplete: "off", list: "gus-models", ...(native ? {} : { disabled: true }) }) as HTMLInputElement;
     const localResult = h("p", { class: "hint", "aria-live": "polite" });
     const gus = nativeGusPlugin();
+    const catalog = h("div", { class: "list" });
+    let present = new Set<string>();
+    const useModel = (file: string) => {
+      localModel.value = file;
+      localOn.checked = true;
+      commit();
+      forgetLocalMind();
+      localResult.textContent = `GUS local usará ${file}. Pruébalo con «Probar GUS local».`;
+    };
+    const renderCatalog = () => {
+      catalog.replaceChildren(...KNOWN_MODELS.map((m) => this.modelRow(m, present.has(m.filename), {
+        download: () => void this.downloadModel(m, localResult).then(() => refreshInstalled()),
+        cancel: () => void gus?.cancelDownload?.(),
+        use: () => useModel(m.filename),
+        remove: () => this.confirm(`¿Borrar ${m.label} del teléfono? Puedes volver a descargarlo.`, "Borrar", () => {
+          void gus?.deleteModel?.({ model: m.filename }).then(() => {
+            forgetLocalMind();
+            if (localModel.value === m.filename) localModel.value = "";
+            return refreshInstalled();
+          });
+        }),
+      })));
+    };
     const refreshInstalled = async () => {
       const list = await gus?.listModels?.().catch(() => null);
-      installed.replaceChildren(...(list?.models ?? []).map((m) => h("option", { value: m.model }, `${Math.round(m.bytes / (1024 * 1024))} MB`)));
+      present = new Set((list?.models ?? []).map((m) => m.model));
+      installed.replaceChildren(...(list?.models ?? []).map((m) => h("option", { value: m.model }, sizeLabel(m.bytes))));
       if (list && !localModel.value.trim() && list.models.length === 1) localModel.value = list.models[0]!.model;
+      renderCatalog();
     };
-    void refreshInstalled();
+    this.onGusDownloadChange = renderCatalog;
+    if (native) void refreshInstalled();
     const importModel = async () => {
       if (!gus?.importModel) return void (localResult.textContent = LOCAL_REQUIRES_NATIVE);
       localResult.textContent = "Elige el archivo .gguf… (copiarlo puede tardar un poco)";
@@ -662,7 +737,10 @@ export class App {
       h("label", { class: "switch" }, localOn, h("span", {}, "Usar GUS local")),
       h("label", { class: "field-label" }, "Archivo del modelo (.gguf)", localModel),
       installed,
-      ...(native ? [h("p", { class: "hint small" }, `Probado en CI: ${KNOWN_MODELS.map((m) => `${m.label}, archivo ${m.filename} (${m.source})`).join("; ")}. Descárgalo en el teléfono y luego impórtalo aquí.`)] : []),
+      ...(native ? [
+        h("p", { class: "hint small" }, "Descargar pide el archivo a Hugging Face (versión fijada) y solo lo instala si su tamaño y su SHA-256 coinciden. No se manda nada de tu criatura. Usa Wi-Fi y deja la app abierta mientras baja."),
+        catalog,
+      ] : []),
       h("div", { class: "row wrap" },
         h("button", { class: "btn", type: "button", onclick: () => void importModel(), ...(native ? {} : { disabled: true }) }, "Importar modelo (.gguf)"),
         h("button", { class: "btn", type: "button", onclick: () => void testLocal(), ...(native ? {} : { disabled: true }) }, "Probar GUS local")),
