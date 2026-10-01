@@ -1,6 +1,9 @@
 import Foundation
 import Capacitor
+import CryptoKit
 import GUSBridge
+import UIKit
+import UniformTypeIdentifiers
 
 /// The creature's local brain on iOS: loads a GGUF from the app's own models folder and
 /// turns a composed chat into text. It holds no game state and cannot reach it: the web
@@ -17,6 +20,8 @@ public class GusLocalPlugin: CAPPlugin, CAPBridgedPlugin {
         CAPPluginMethod(name: "generate", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "cancel", returnType: CAPPluginReturnPromise),
         CAPPluginMethod(name: "unload", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "listModels", returnType: CAPPluginReturnPromise),
+        CAPPluginMethod(name: "importModel", returnType: CAPPluginReturnPromise),
     ]
 
     private static let maxTokensCap = 512
@@ -24,15 +29,109 @@ public class GusLocalPlugin: CAPPlugin, CAPBridgedPlugin {
     private let lane = DispatchQueue(label: "io.github.dannybaanks.tamagotchia.gus-local")
     private var context: OpaquePointer?
     private var loadedModel: String?
+    /** Copies of imported models: big and slow, kept off the inference lane. */
+    private let io = DispatchQueue(label: "io.github.dannybaanks.tamagotchia.gus-import")
+    private var pendingImport: CAPPluginCall?
+    /** Room left on the phone after a copy, so the game's own save never runs out of space. */
+    private static let spaceHeadroom: Int64 = 64 * 1024 * 1024
 
     deinit {
         if let context { gus_llama_destroy(context) }
     }
 
+    static func modelsDirectory() -> URL? {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first?
+            .appendingPathComponent("models", isDirectory: true)
+    }
+
     static func modelURL(named name: String) -> URL? {
         guard !name.isEmpty, !name.contains("/"), !name.contains("\\"), !name.hasPrefix("."), name.hasSuffix(".gguf"),
-              let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else { return nil }
-        return support.appendingPathComponent("models", isDirectory: true).appendingPathComponent(name)
+              let dir = modelsDirectory() else { return nil }
+        return dir.appendingPathComponent(name)
+    }
+
+    /// The installed models, by file name.
+    @objc func listModels(_ call: CAPPluginCall) {
+        guard let dir = Self.modelsDirectory(),
+              let names = try? FileManager.default.contentsOfDirectory(atPath: dir.path) else {
+            call.resolve(["models": []]); return
+        }
+        let models: [JSObject] = names.sorted().compactMap { name in
+            guard let url = Self.modelURL(named: name),
+                  let size = (try? FileManager.default.attributesOfItem(atPath: url.path))?[.size] as? NSNumber else { return nil }
+            return ["model": name, "bytes": size.intValue]
+        }
+        call.resolve(["models": models])
+    }
+
+    /// Lets the player pick a .gguf with the system document picker and copies it into the
+    /// models folder. Nothing is downloaded. The copy is hashed (CryptoKit SHA-256) and must
+    /// start with the GGUF magic, or it is discarded.
+    @objc func importModel(_ call: CAPPluginCall) {
+        DispatchQueue.main.async {
+            guard let presenter = self.bridge?.viewController else { call.reject("No hay ventana para el selector.", "IMPORT_FAILED"); return }
+            self.pendingImport?.reject("Se abrió otro selector.", "CANCELLED")
+            self.pendingImport = call
+            let picker = UIDocumentPickerViewController(forOpeningContentTypes: [.data], asCopy: true)
+            picker.allowsMultipleSelection = false
+            picker.delegate = self
+            presenter.present(picker, animated: true)
+        }
+    }
+
+    fileprivate func finishImport(from source: URL?) {
+        guard let call = pendingImport else { return }
+        pendingImport = nil
+        guard let source else { call.reject("No se eligió ningún archivo.", "CANCELLED"); return }
+        guard let target = Self.modelURL(named: source.lastPathComponent), let dir = Self.modelsDirectory() else {
+            try? FileManager.default.removeItem(at: source)
+            call.reject("El archivo debe ser un modelo .gguf.", "BAD_MODEL"); return
+        }
+        io.async {
+            // asCopy: the picker handed us a temporary copy; it is ours to clean up.
+            defer { try? FileManager.default.removeItem(at: source) }
+            let part = dir.appendingPathComponent(target.lastPathComponent + ".part")
+            do {
+                try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+                let size = ((try? FileManager.default.attributesOfItem(atPath: source.path))?[.size] as? NSNumber)?.int64Value ?? 0
+                if let free = (try? dir.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]))?.volumeAvailableCapacityForImportantUsage,
+                   size > 0, free < size + Self.spaceHeadroom {
+                    call.reject("No hay espacio suficiente en el teléfono.", "NO_SPACE"); return
+                }
+                FileManager.default.createFile(atPath: part.path, contents: nil)
+                let input = try FileHandle(forReadingFrom: source)
+                let output = try FileHandle(forWritingTo: part)
+                defer { try? input.close(); try? output.close() }
+                var hasher = SHA256()
+                var head = Data()
+                var total: Int64 = 0
+                while true {
+                    let chunk = try autoreleasepool { try input.read(upToCount: 1 << 20) ?? Data() }
+                    if chunk.isEmpty { break }
+                    if head.count < 4 { head.append(chunk.prefix(4 - head.count)) }
+                    hasher.update(data: chunk)
+                    try output.write(contentsOf: chunk)
+                    total += Int64(chunk.count)
+                }
+                try output.synchronize()
+                try output.close()
+                guard head == Data("GGUF".utf8) else {
+                    try? FileManager.default.removeItem(at: part)
+                    call.reject("El archivo no es un modelo GGUF.", "BAD_MODEL"); return
+                }
+                _ = try? FileManager.default.removeItem(at: target)
+                try FileManager.default.moveItem(at: part, to: target)
+                var values = URLResourceValues()
+                values.isExcludedFromBackup = true // a re-importable model, not player data
+                var stored = target
+                try? stored.setResourceValues(values)
+                let sha = hasher.finalize().map { String(format: "%02x", $0) }.joined()
+                call.resolve(["model": target.lastPathComponent, "bytes": Int(total), "sha256": sha])
+            } catch {
+                try? FileManager.default.removeItem(at: part)
+                call.reject(error.localizedDescription, "IMPORT_FAILED")
+            }
+        }
     }
 
     @objc func load(_ call: CAPPluginCall) {
@@ -101,6 +200,16 @@ public class GusLocalPlugin: CAPPlugin, CAPBridgedPlugin {
             if let context = self.context { gus_llama_destroy(context); self.context = nil; self.loadedModel = nil }
             call.resolve()
         }
+    }
+}
+
+extension GusLocalPlugin: UIDocumentPickerDelegate {
+    public func documentPicker(_ controller: UIDocumentPickerViewController, didPickDocumentsAt urls: [URL]) {
+        finishImport(from: urls.first)
+    }
+
+    public func documentPickerWasCancelled(_ controller: UIDocumentPickerViewController) {
+        finishImport(from: nil)
     }
 }
 

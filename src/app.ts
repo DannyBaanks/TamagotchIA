@@ -12,7 +12,8 @@ import { FOODS, type EventKind, type Food, type GameEvent, type World } from "./
 import { copyWorld, createWorld, trimMemories } from "./engine/world";
 import { personaInput } from "./persona/contract";
 import { OpenAICompatibleProvider, type Narration, type PersonalityProvider } from "./persona/providers";
-import { nativeLocalMind } from "./persona/nativeGus";
+import { forgetLocalMind, nativeGusPlugin, nativeLocalMind } from "./persona/nativeGus";
+import { KNOWN_MODELS, describeImport } from "./persona/knownModels";
 import { LOCAL_REQUIRES_NATIVE, routeMind, speakRouted, type Route } from "./persona/route";
 import { SPECIES, poseForAnimation, speciesById } from "./species";
 import { browserStore, exportSave, importSave, load, save, wipe } from "./store/save";
@@ -532,8 +533,30 @@ export class App {
     const result = h("p", { class: "hint", "aria-live": "polite" });
     const native = isNative();
     const localOn = h("input", { type: "checkbox", id: "gus-on", ...(s.localEnabled && native ? { checked: true } : {}), ...(native ? {} : { disabled: true }) }) as HTMLInputElement;
-    const localModel = h("input", { class: "field", value: s.localModel, placeholder: "p. ej. qwen2.5-0.5b-instruct-q4_k_m.gguf", autocomplete: "off", ...(native ? {} : { disabled: true }) }) as HTMLInputElement;
+    const installed = h("datalist", { id: "gus-models" });
+    const localModel = h("input", { class: "field", value: s.localModel, placeholder: `p. ej. ${KNOWN_MODELS[0]!.filename}`, autocomplete: "off", list: "gus-models", ...(native ? {} : { disabled: true }) }) as HTMLInputElement;
     const localResult = h("p", { class: "hint", "aria-live": "polite" });
+    const gus = nativeGusPlugin();
+    const refreshInstalled = async () => {
+      const list = await gus?.listModels?.().catch(() => null);
+      installed.replaceChildren(...(list?.models ?? []).map((m) => h("option", { value: m.model }, `${Math.round(m.bytes / (1024 * 1024))} MB`)));
+      if (list && !localModel.value.trim() && list.models.length === 1) localModel.value = list.models[0]!.model;
+    };
+    void refreshInstalled();
+    const importModel = async () => {
+      if (!gus?.importModel) return void (localResult.textContent = LOCAL_REQUIRES_NATIVE);
+      localResult.textContent = "Elige el archivo .gguf… (copiarlo puede tardar un poco)";
+      try {
+        const imported = await gus.importModel();
+        localModel.value = imported.model;
+        forgetLocalMind();
+        localResult.textContent = describeImport(imported);
+        void refreshInstalled();
+      } catch (error) {
+        const code = (error as { code?: string }).code;
+        localResult.textContent = code === "CANCELLED" ? "" : `No se importó: ${error instanceof Error ? error.message : String(error)}`;
+      }
+    };
     const presetNote = h("p", { class: "hint small", "aria-live": "polite" });
     preset.addEventListener("change", () => {
       const chosen = PRESETS[Number(preset.value)];
@@ -638,7 +661,10 @@ export class App {
         : h("p", { class: "hint" }, LOCAL_REQUIRES_NATIVE),
       h("label", { class: "switch" }, localOn, h("span", {}, "Usar GUS local")),
       h("label", { class: "field-label" }, "Archivo del modelo (.gguf)", localModel),
-      h("div", { class: "row" },
+      installed,
+      ...(native ? [h("p", { class: "hint small" }, `Probado en CI: ${KNOWN_MODELS.map((m) => `${m.label}, archivo ${m.filename} (${m.source})`).join("; ")}. Descárgalo en el teléfono y luego impórtalo aquí.`)] : []),
+      h("div", { class: "row wrap" },
+        h("button", { class: "btn", type: "button", onclick: () => void importModel(), ...(native ? {} : { disabled: true }) }, "Importar modelo (.gguf)"),
         h("button", { class: "btn", type: "button", onclick: () => void testLocal(), ...(native ? {} : { disabled: true }) }, "Probar GUS local")),
       localResult,
       ...this.alertSettings(),

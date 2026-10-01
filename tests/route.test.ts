@@ -142,3 +142,26 @@ describe("GUS local settings", () => {
     expect(loadSettings(store)).toMatchObject({ localEnabled: true, localModel: "" });
   });
 });
+
+import { readFileSync } from "node:fs";
+import { KNOWN_MODELS, describeImport, knownModelBySha } from "../src/persona/knownModels";
+
+describe("known models", () => {
+  it("match the model the native smoke actually ran (native/gus-smoke/model.json)", () => {
+    const smoke = JSON.parse(readFileSync(new URL("../native/gus-smoke/model.json", import.meta.url), "utf8"));
+    const known = KNOWN_MODELS.find((m) => m.id === smoke.id)!;
+    expect(known).toMatchObject({ filename: smoke.filename, bytes: smoke.bytes, sha256: smoke.sha256 });
+    expect(known.source).toContain(smoke.revision);
+    expect(isModelFileName(known.filename)).toBe(true);
+  });
+
+  it("an import is vouched for only by hash, and never as 'works on this phone'", () => {
+    const k = KNOWN_MODELS[0]!;
+    expect(knownModelBySha(k.sha256.toUpperCase())).toBe(k);
+    const ok = describeImport({ model: "renamed.gguf", bytes: k.bytes, sha256: k.sha256 });
+    expect(ok).toMatch(/probó el CI/);
+    expect(ok).toMatch(/todavía no está demostrado/);
+    const other = describeImport({ model: k.filename, bytes: k.bytes, sha256: "0".repeat(64) });
+    expect(other).toMatch(/No es un modelo probado/);
+  });
+});

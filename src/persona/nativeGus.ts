@@ -9,10 +9,22 @@ import type { CreatureMind } from "./mind";
 let plugin: GusLocalPlugin | null = null;
 let cached: { model: string; mind: CreatureMind } | null = null;
 
-export function nativeLocalMind(model: string): CreatureMind | null {
+/** The raw plugin, for model management in Settings. null outside the native app. */
+export function nativeGusPlugin(): GusLocalPlugin | null {
   if (!Capacitor.isNativePlatform()) return null;
   plugin ??= registerPlugin<GusLocalPlugin>("GusLocal");
+  return plugin;
+}
+
+export function nativeLocalMind(model: string): CreatureMind | null {
+  const gus = nativeGusPlugin();
+  if (!gus) return null;
   // Reuse the mind (and the loaded model) while the chosen file stays the same.
-  if (cached?.model !== model) cached = { model, mind: localMind(plugin, { model }) };
+  if (cached?.model !== model) cached = { model, mind: localMind(gus, { model }) };
   return cached.mind;
+}
+
+/** After a (re)import the file may have changed under the same name: load it again next turn. */
+export function forgetLocalMind(): void {
+  cached = null;
 }

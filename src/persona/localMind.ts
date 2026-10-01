@@ -23,13 +23,17 @@ export interface GusGenerateOptions {
  * Implemented natively: android/…/GusLocalPlugin.java and ios/App/GusLocal. The native side
  * only formats and generates. Models are named by file name inside the app's own models
  * folder, never by path. Rejections carry a code: RUNTIME_MISSING, BAD_MODEL,
- * MODEL_MISSING, LOAD_FAILED, NOT_LOADED, BAD_REQUEST, GENERATE_FAILED.
+ * MODEL_MISSING, LOAD_FAILED, NOT_LOADED, BAD_REQUEST, GENERATE_FAILED, and for imports CANCELLED, NO_SPACE, IMPORT_FAILED.
  */
 export interface GusLocalPlugin {
   generate(options: GusGenerateOptions): Promise<{ text: string }>;
   load?(options: { model: string; contextTokens?: number }): Promise<{ model: string }>;
   cancel?(): Promise<void>;
   unload?(): Promise<void>;
+  /** Installed models in the app's models folder. */
+  listModels?(): Promise<{ models: Array<{ model: string; bytes: number }> }>;
+  /** System file picker → copy into the models folder, platform SHA-256, GGUF magic checked. */
+  importModel?(): Promise<{ model: string; bytes: number; sha256: string }>;
 }
 
 /**
