@@ -162,8 +162,15 @@ jobs:
         run: |
           APP=$(find /tmp/tama_gus_dd/Build/Products -maxdepth 2 -name "App.app" -type d | head -1)
           test -n "$APP" || { echo "::error::no App.app"; exit 1; }
-          nm -g "$APP/App" 2>/dev/null | grep -q "gus_llama_generate_chat_sampled" || find "$APP" -name "*.framework" | head
-          grep -q "GusLocalPlugin" build.log && echo "GusLocalPlugin compiled"
+          test -d "$APP/Frameworks/llama.framework" || { echo "::error::llama.framework not embedded"; exit 1; }
+          # Debug builds put the app's code in App.debug.dylib; Release in App. The bridge is linked statically.
+          found=""
+          for bin in "$APP/App" "$APP"/*.dylib; do
+            [ -f "$bin" ] && nm -gU "$bin" 2>/dev/null | grep -q "_gus_llama_generate_chat_sampled" && found="$bin"
+          done
+          test -n "$found" || { echo "::error::the vendored bridge is not linked into the app"; exit 1; }
+          echo "bridge linked in $(basename "$found"); llama.framework embedded"
+          grep -q "GusLocalPlugin" build.log || { echo "::error::GusLocalPlugin was not compiled"; exit 1; }
       - uses: actions/upload-artifact@v4
         if: always()
         with:
