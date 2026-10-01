@@ -1,11 +1,18 @@
 # Builds an unsigned TamagotchIA.ipa on a macOS runner (same pattern as applebridge-probe).
 # Signing happens on your side with your Apple ID (iBridge / iloader or Sideloadly).
+# Like iSyCode Móvil: every push that touches the app (any branch) and every PR leaves the
+# IPA as a workflow artifact. Nothing is published as a release from here.
 name: iOS (IPA sin firmar)
 on:
   workflow_dispatch:
+  pull_request:
   push:
-    branches: [main]
     paths: [ios/**, src/**, public/**, vendor/gus-runtime/**, package.json, package-lock.json, capacitor.config.ts, .github/workflows/ios.yml]
+concurrency:
+  group: ios-ipa-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+permissions:
+  contents: read
 jobs:
   build-ipa:
     runs-on: macos-latest
@@ -62,6 +69,24 @@ jobs:
           (cd out && zip -qry TamagotchIA-unsigned.ipa Payload)
           shasum -a 256 out/TamagotchIA-unsigned.ipa | tee out/SHA256SUMS
           ls -la out
+      - name: The IPA carries the local brain, and no model weights
+        run: |
+          set -euo pipefail
+          APP=$(find out/Payload -maxdepth 1 -name "*.app" -type d | head -1)
+          if unzip -l out/TamagotchIA-unsigned.ipa | grep -i '\.gguf'; then
+            echo "::error::Models are downloaded or imported in the app, never bundled."; exit 1
+          fi
+          test -d "$APP/Frameworks/llama.framework" || { echo "::error::llama.framework not embedded"; exit 1; }
+          nm -gU "$APP/App" 2>/dev/null | grep -q "_gus_llama_generate_chat_sampled" || { echo "::error::the vendored bridge is not linked into the app"; exit 1; }
+          grep -q "GusLocalPlugin" build-output.log || { echo "::error::GusLocalPlugin was not compiled"; exit 1; }
+          {
+            echo "### TamagotchIA-unsigned.ipa"
+            echo "- Size: $(du -h out/TamagotchIA-unsigned.ipa | cut -f1)"
+            echo "- SHA-256: \`$(cut -d' ' -f1 out/SHA256SUMS)\`"
+            echo "- llama.cpp: \`${{ steps.llama.outputs.commit }}\`"
+            echo "- Commit: \`${GITHUB_SHA}\`"
+            echo "- Unsigned: sign it with your Apple ID (Sideloadly / iloader). Running on an iPhone is NOT_DEMONSTRATED until someone does it."
+          } >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v4
         with:
           name: TamagotchIA-unsigned-ipa
