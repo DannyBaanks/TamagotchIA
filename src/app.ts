@@ -11,10 +11,12 @@ import { evolve, simulateElapsed } from "./engine/simulation";
 import { FOODS, type EventKind, type Food, type GameEvent, type World } from "./engine/types";
 import { copyWorld, createWorld, trimMemories } from "./engine/world";
 import { personaInput } from "./persona/contract";
-import { OpenAICompatibleProvider, narrate, type Narration, type PersonalityProvider } from "./persona/providers";
+import { OpenAICompatibleProvider, type Narration, type PersonalityProvider } from "./persona/providers";
+import { nativeLocalMind } from "./persona/nativeGus";
+import { LOCAL_REQUIRES_NATIVE, routeMind, speakRouted, type Route } from "./persona/route";
 import { SPECIES, poseForAnimation, speciesById } from "./species";
 import { browserStore, exportSave, importSave, load, save, wipe } from "./store/save";
-import { PRESETS, loadSecret, loadSettings, saveSecret, saveSettings, type PersonaSettings } from "./store/settings";
+import { PRESETS, isModelFileName, loadSecret, loadSettings, saveSecret, saveSettings, type PersonaSettings } from "./store/settings";
 import { forecast } from "./engine/forecast";
 import { alertText, decide, inQuietHours, type NotifyPrefs, type NotifyState } from "./notify/alerts";
 import { isNative, nativePermission, schedule, showNow } from "./notify/native";
@@ -193,6 +195,15 @@ export class App {
     return new OpenAICompatibleProvider({ baseUrl: this.settings.baseUrl.trim(), model: this.settings.model.trim(), apiKey: loadSecret(this.store) });
   }
 
+  private route(): Route {
+    return routeMind({
+      localEnabled: this.settings.localEnabled,
+      localModel: this.settings.localModel,
+      local: nativeLocalMind,
+      remote: this.provider(),
+    });
+  }
+
   private narrateNewEvents(): void {
     if (!this.world || this.world.seq <= this.seqSeen) return;
     const fresh = this.world.events.filter((e) => e.seq > this.seqSeen);
@@ -205,10 +216,11 @@ export class App {
   private async narrateEvent(event: GameEvent, playerSaid: string | null): Promise<void> {
     if (!this.world) return;
     const token = ++this.narrationToken;
-    const provider = this.provider();
-    this.thinking = provider !== null;
+    const route = this.route();
+    this.thinking = route.kind !== "fallback";
     this.update();
-    const n = await narrate(provider, personaInput(this.world, event, this.now(), playerSaid), event.seq, this.settings.timeoutMs);
+    const now = this.now();
+    const n = await speakRouted(route, this.world, personaInput(this.world, event, now, playerSaid), now, event.seq, this.settings.timeoutMs);
     if (token !== this.narrationToken || !this.world) return; // a newer moment took over
     this.thinking = false;
     this.lastNarration = n;
@@ -483,7 +495,10 @@ export class App {
     };
     const chips = ["¿Cómo estás?", "Te quiero mucho", "¿Qué hiciste hoy?", "¿Tienes hambre?"].map((t) =>
       h("button", { class: "chip-btn", type: "button", onclick: () => send(t) }, t));
-    const voice = this.provider() ? `Responde con ${this.settings.model}.` : "Responde con su voz local. Conecta un modelo en Ajustes para que improvise.";
+    const route = this.route();
+    const voice = route.kind === "local" ? `Responde GUS local (${route.model}), en este teléfono.`
+      : route.kind === "remote" ? `Responde con ${this.settings.model}.`
+      : route.notice ?? "Responde con su voz local. Conecta un modelo en Ajustes para que improvise.";
     this.sheet("Platicar",
       h("div", { class: "chips" }, ...chips),
       h("form", { class: "row", onsubmit: (e: Event) => { e.preventDefault(); send(input.value); } }, input, h("button", { class: "btn primary", type: "submit" }, "Decir")),
@@ -515,6 +530,10 @@ export class App {
     const model = h("input", { class: "field", value: s.model, placeholder: "p. ej. google/gemma-4-31b-it:free", autocomplete: "off" }) as HTMLInputElement;
     const key = h("input", { class: "field", type: "password", value: loadSecret(this.store), placeholder: "API key (opcional para modelos locales)", autocomplete: "off" }) as HTMLInputElement;
     const result = h("p", { class: "hint", "aria-live": "polite" });
+    const native = isNative();
+    const localOn = h("input", { type: "checkbox", id: "gus-on", ...(s.localEnabled && native ? { checked: true } : {}), ...(native ? {} : { disabled: true }) }) as HTMLInputElement;
+    const localModel = h("input", { class: "field", value: s.localModel, placeholder: "p. ej. qwen2.5-0.5b-instruct-q4_k_m.gguf", autocomplete: "off", ...(native ? {} : { disabled: true }) }) as HTMLInputElement;
+    const localResult = h("p", { class: "hint", "aria-live": "polite" });
     const presetNote = h("p", { class: "hint small", "aria-live": "polite" });
     preset.addEventListener("change", () => {
       const chosen = PRESETS[Number(preset.value)];
@@ -540,7 +559,12 @@ export class App {
     preset.addEventListener("change", checkKey);
 
     const commit = () => {
-      this.settings = { enabled: enabled.checked, baseUrl: url.value.trim(), model: model.value.trim(), timeoutMs: s.timeoutMs };
+      const file = localModel.value.trim();
+      this.settings = {
+        enabled: enabled.checked, baseUrl: url.value.trim(), model: model.value.trim(), timeoutMs: s.timeoutMs,
+        // Outside the native app the switch is off and stays off: there is no runtime here.
+        localEnabled: native && localOn.checked, localModel: isModelFileName(file) ? file : "",
+      };
       saveSettings(this.store, this.settings);
       saveSecret(this.store, key.value.trim());
     };
@@ -553,10 +577,29 @@ export class App {
       if (!this.settings.model) return void (result.textContent = "Escribe el nombre del modelo (por ejemplo, uno que termine en «:free»).");
       result.textContent = "Probando…";
       const event: GameEvent = w.events.at(-1) ?? { seq: 0, at: this.now(), kind: "TALKED", payload: {} };
-      const n = await narrate(this.provider(), personaInput(w, { ...event, kind: "TALKED", payload: {} }, this.now(), "¡Hola! ¿Me escuchas?"), event.seq, this.settings.timeoutMs);
+      const now = this.now();
+      const route = this.route();
+      if (route.kind !== "remote") return void (result.textContent = "GUS local está activo: el modelo remoto no se usa. Pruébalo con «Probar GUS local».");
+      const n = await speakRouted(route, w, personaInput(w, { ...event, kind: "TALKED", payload: {} }, now, "¡Hola! ¿Me escuchas?"), now, event.seq, this.settings.timeoutMs);
       result.textContent = n.source === "model"
         ? `✓ Responde el modelo (${n.latencyMs} ms): «${n.reply.speech}»`
         : `Usó la voz local${n.problem ? ` porque: ${n.problem}` : " (no hay modelo configurado)"}. «${n.reply.speech}»`;
+    };
+
+    const testLocal = async () => {
+      commit();
+      const w = this.world;
+      if (!w) return;
+      if (!native) return void (localResult.textContent = LOCAL_REQUIRES_NATIVE);
+      if (!this.settings.localEnabled) return void (localResult.textContent = "Activa «Usar GUS local» para probarlo.");
+      if (!this.settings.localModel) return void (localResult.textContent = "Escribe el nombre del archivo .gguf (solo el nombre, sin carpetas).");
+      localResult.textContent = "Cargando el modelo y pensando… (la primera vez tarda)";
+      const event: GameEvent = w.events.at(-1) ?? { seq: 0, at: this.now(), kind: "TALKED", payload: {} };
+      const now = this.now();
+      const n = await speakRouted(this.route(), w, personaInput(w, { ...event, kind: "TALKED", payload: {} }, now, "¡Hola! ¿Me escuchas?"), now, event.seq, this.settings.timeoutMs);
+      localResult.textContent = n.source === "model"
+        ? `✓ Responde GUS local (${n.latencyMs} ms), sin internet: «${n.reply.speech}»`
+        : `Usó la voz local${n.problem ? ` porque: ${n.problem}` : ""}. «${n.reply.speech}»`;
     };
 
     const fileInput = h("input", { type: "file", accept: "application/json,.json", class: "hidden" }) as HTMLInputElement;
@@ -589,6 +632,15 @@ export class App {
         h("button", { class: "btn", type: "button", onclick: () => { commit(); this.toast("Guardado"); } }, "Guardar"),
         h("button", { class: "btn primary", type: "button", onclick: () => void test() }, "Probar la voz")),
       result,
+      h("h3", {}, "GUS local (en este teléfono)"),
+      native
+        ? h("p", { class: "hint" }, "El modelo corre en el teléfono: no se manda nada a internet. Mientras esté activo, el modelo remoto no se usa. El archivo .gguf va en la carpeta de modelos de la app.")
+        : h("p", { class: "hint" }, LOCAL_REQUIRES_NATIVE),
+      h("label", { class: "switch" }, localOn, h("span", {}, "Usar GUS local")),
+      h("label", { class: "field-label" }, "Archivo del modelo (.gguf)", localModel),
+      h("div", { class: "row" },
+        h("button", { class: "btn", type: "button", onclick: () => void testLocal(), ...(native ? {} : { disabled: true }) }, "Probar GUS local")),
+      localResult,
       ...this.alertSettings(),
       h("h3", {}, "Partida"),
       h("div", { class: "row wrap" },

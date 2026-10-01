@@ -45,8 +45,28 @@ export function composeLocalChat(boxJson: string, turnJson: string): GusMessage[
 }
 
 export const LOCAL_MAX_TOKENS = 160;
+/** The window the runtime is created with; the Context Box budget is computed against it. */
+export const LOCAL_CONTEXT_TOKENS = 2048;
 
-export function localMind(plugin: GusLocalPlugin, name = "GUS local"): CreatureMind {
+export interface LocalMindOptions {
+  name?: string;
+  /** A file name inside the app's models folder. When set, the plugin loads it on first use. */
+  model?: string;
+  contextTokens?: number;
+}
+
+export function localMind(plugin: GusLocalPlugin, options: LocalMindOptions | string = {}): CreatureMind {
+  const { name = "GUS local", model, contextTokens = LOCAL_CONTEXT_TOKENS } = typeof options === "string" ? { name: options } : options;
+  // One load per mind; a failed load is retried on the next turn (the file may be installed by then).
+  let loading: Promise<unknown> | null = null;
+  const ensureLoaded = (): Promise<unknown> => {
+    if (!model || !plugin.load) return Promise.resolve();
+    loading ??= plugin.load({ model, contextTokens }).catch((error: unknown) => {
+      loading = null;
+      throw error;
+    });
+    return loading;
+  };
   return {
     name,
     kind: "local",
@@ -55,12 +75,13 @@ export function localMind(plugin: GusLocalPlugin, name = "GUS local"): CreatureM
       const checked = validateContextBox(request.box);
       if (!checked.ok) throw new Error(`context box rechazada: ${checked.error}`);
       if (signal.aborted) throw new Error("cancelado");
+      const aborted = new Promise<never>((_, reject) => {
+        signal.addEventListener("abort", () => reject(new Error("cancelado")), { once: true });
+      });
+      await Promise.race([ensureLoaded(), aborted]);
       const call = plugin.generate({
         messages: composeLocalChat(JSON.stringify(checked.box), JSON.stringify(request.turn)),
         maxTokens: LOCAL_MAX_TOKENS,
-      });
-      const aborted = new Promise<never>((_, reject) => {
-        signal.addEventListener("abort", () => reject(new Error("cancelado")), { once: true });
       });
       const result = await Promise.race([call, aborted]);
       if (!result || typeof result.text !== "string") throw new Error("el runtime local no devolvió texto");

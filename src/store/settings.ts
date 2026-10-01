@@ -12,6 +12,10 @@ export interface PersonaSettings {
   baseUrl: string;
   model: string;
   timeoutMs: number;
+  /** GUS local: the model runs on this phone and nothing is sent anywhere. Native app only. */
+  localEnabled: boolean;
+  /** A .gguf file name inside the app's models folder (never a path). */
+  localModel: string;
 }
 
 export const DEFAULT_SETTINGS: PersonaSettings = {
@@ -19,6 +23,8 @@ export const DEFAULT_SETTINGS: PersonaSettings = {
   baseUrl: "https://openrouter.ai/api/v1",
   model: "",
   timeoutMs: 8000,
+  localEnabled: false,
+  localModel: "",
 };
 
 export interface Preset {
@@ -67,10 +73,17 @@ export function loadSettings(store: KeyValueStore): PersonaSettings {
       baseUrl: typeof raw.baseUrl === "string" ? raw.baseUrl : DEFAULT_SETTINGS.baseUrl,
       model: typeof raw.model === "string" ? raw.model : "",
       timeoutMs: typeof raw.timeoutMs === "number" && raw.timeoutMs >= 1000 && raw.timeoutMs <= 30000 ? raw.timeoutMs : DEFAULT_SETTINGS.timeoutMs,
+      localEnabled: raw.localEnabled === true,
+      localModel: typeof raw.localModel === "string" && isModelFileName(raw.localModel) ? raw.localModel : "",
     };
   } catch {
     return { ...DEFAULT_SETTINGS };
   }
+}
+
+/** Same rule as the native plugins: a bare .gguf file name, no folders, nothing hidden. */
+export function isModelFileName(name: string): boolean {
+  return name.length > 0 && name.length <= 200 && name.endsWith(".gguf") && !/[\\/]/.test(name) && !name.startsWith(".");
 }
 
 export function saveSettings(store: KeyValueStore, settings: PersonaSettings): void {

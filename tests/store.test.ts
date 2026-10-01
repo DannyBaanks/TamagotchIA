@@ -55,7 +55,7 @@ describe("save and load", () => {
 describe("the API key", () => {
   it("never appears in a save or an export", () => {
     const store = new MemoryStore();
-    saveSettings(store, { enabled: true, baseUrl: "https://x.test/v1", model: "m", timeoutMs: 5000 });
+    saveSettings(store, { enabled: true, baseUrl: "https://x.test/v1", model: "m", timeoutMs: 5000, localEnabled: false, localModel: "" });
     saveSecret(store, "sk-live-do-not-leak");
     save(store, world(), T0);
     expect(store.getItem(SAVE_KEY)).not.toContain("sk-live-do-not-leak");
