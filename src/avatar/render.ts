@@ -122,6 +122,9 @@ function anatomy(body: PartsSpec["body"]): Anatomy {
       return { parts: [[8, 9.8, 4.9, 4.8]], head: { x: 8, y: 8.6, rx: 4.9, ry: 3.6 }, face: 8.4, tail: [12.4, 11.6], tailDir: 1, neck: null };
     case "dino":
       return { parts: [[7.2, 11.6, 4.4, 3], [9, 6.8, 3.9, 3.2], [8.2, 9.3, 2.6, 2]], head: { x: 9, y: 6.8, rx: 3.9, ry: 3.2 }, face: 6.8, tail: [3.4, 12.8], tailDir: -1, neck: 9.6 };
+    // A crab: one wide shell, the face low and wide, legs instead of a tail.
+    case "cangrejo":
+      return { parts: [[8, 10.7, 6.1, 3.4]], head: { x: 8, y: 10.4, rx: 6.1, ry: 3.5 }, face: 10.6, tail: [13.4, 12.6], tailDir: 1, neck: null };
     default:
       return { parts: [[8, 9.6, 5.2, 4.9]], head: { x: 8, y: 9, rx: 5.2, ry: 4.3 }, face: 9, tail: [12.8, 12], tailDir: 1, neck: null };
   }
@@ -205,16 +208,41 @@ function drawParts(spec: PartsSpec, look: Look): Uint8Array {
   if (spec.tail === "dino") c.triangle(BODY, P(-1.2, -1.4), P(-1.2, 1.3), P(2.4, 0.6 * flip));
   if (spec.tail === "rayo") c.path(ITEM, [P(-0.6, 0), P(1.2, -1), P(0.6, -1.9), P(2.2, -3.2)], 1.1);
 
+  // the crab wears claws and little legs, not ears
+  if (spec.body === "cangrejo") {
+    const lift = look.hop;
+    // two big claws on the sides, the signature of the logo
+    for (const side of [-1, 1]) {
+      const cx2 = hx + side * (hrx + 1.5);
+      const cy2 = hy - 1.1 - lift * 0.6;
+      c.ellipse(BODY, cx2, cy2, 1.7, 1.35);
+      if (u === 2) c.ellipse(ACC, cx2 + side * 0.25, cy2 - 0.35, 0.85, 0.6);
+      // the pincer: a notch cut out of the claw
+      c.ellipse(T, cx2 + side * 0.75, cy2 - 1.15, 0.75, 0.6);
+    }
+    // four small legs under the shell
+    for (const side of [-1, 1]) for (const step of [0, 1]) {
+      const lx = hx + side * (3.1 + step * 1.5);
+      c.path(BODY, [[lx, hy + 1.6], [lx + side * 0.5, hy + 3.1]], 0.55);
+    }
+    // the two antennae above the eyes
+    for (const side of [-1, 1]) {
+      c.path(BODY, [[hx + side * 1.6, top + 1.1], [hx + side * 2.5, top - 1.5]], 0.5);
+      c.ellipse(ACC, hx + side * 2.5, top - 2, 0.72, 0.72);
+    }
+  }
+
   // ears, behind the head
   const earTop = top + 0.6;
-  if (spec.ears === "gato") {
+  if (spec.body === "cangrejo") { /* its claws already sit where ears would go */ }
+  else if (spec.ears === "gato") {
     for (const side of [-1, 1]) {
       const ex = hx + side * hrx * 0.62;
       c.triangle(BODY, [ex - 1.4, earTop + 1.2], [ex + 1.4, earTop + 1.2], [ex + side * 0.5, earTop - 2]);
       if (u === 2) c.triangle(ACC, [ex - 0.6, earTop + 0.9], [ex + 0.6, earTop + 0.9], [ex + side * 0.35, earTop - 0.9]);
     }
   }
-  if (spec.ears === "conejo") {
+  else if (spec.ears === "conejo") {
     const ry = Math.max(1.2, Math.min(2.6, (top + 0.2) / 2));
     for (const side of [-1, 1]) {
       const ex = hx + side * hrx * 0.42;
@@ -222,15 +250,15 @@ function drawParts(spec: PartsSpec, look: Look): Uint8Array {
       if (u === 2) c.ellipse(ACC, ex, top - ry + 1.2, 0.4, ry - 0.8);
     }
   }
-  if (spec.ears === "oso") for (const side of [-1, 1]) {
+  else if (spec.ears === "oso") for (const side of [-1, 1]) {
     c.ellipse(BODY, hx + side * hrx * 0.78, top + 0.9, 1.45, 1.45);
     if (u === 2) c.ellipse(ACC, hx + side * hrx * 0.78, top + 0.9, 0.6, 0.6);
   }
-  if (spec.ears === "cuernos") for (const side of [-1, 1]) {
+  else if (spec.ears === "cuernos") for (const side of [-1, 1]) {
     const ex = hx + side * hrx * 0.48;
     c.triangle(ACC, [ex - 0.8, top + 0.9], [ex + 0.8, top + 0.9], [ex + side * 0.6, top - 1.8]);
   }
-  if (spec.ears === "antena") { c.path(BODY, [[hx, top + 0.5], [hx + 0.4, top - 1.4]], 0.7); c.ellipse(ACC, hx + 0.4, top - 1.9, 0.9, 0.9); }
+  else if (spec.ears === "antena") { c.path(BODY, [[hx, top + 0.5], [hx + 0.4, top - 1.4]], 0.7); c.ellipse(ACC, hx + 0.4, top - 1.9, 0.9, 0.9); }
 
   // the body, squashed from the top when breathing
   for (const [cx, cy, rx, ry] of a.parts) {
