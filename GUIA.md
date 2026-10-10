@@ -21,8 +21,8 @@ Abre `http://localhost:5173/` en el navegador. Para verlo como en el teléfono, 
 ```console
 $ npm test
  RUN  v4.1.11 …/TamagotchIA
- Test Files  5 passed (5)
-      Tests  75 passed (75)
+ Test Files  6 passed (6)
+      Tests  79 passed (79)
    Start at  05:40:54
    Duration  1.24s (transform 482ms, setup 0ms, import 623ms, tests 1.31s, environment 0ms)
 ```
@@ -89,7 +89,11 @@ Ajustes → **La voz**:
 **Modelos offline con GUS Local (sin internet ni clave):**
 Elige el preset **GUS Local (GGUF offline)** (`http://localhost:8080/v1`) para que la criatura hable en cualquier lugar sin conexión:
 - `smollm2-360m-instruct-q4_k_m.gguf` (270 MB): ultra-rápido, no consume batería.
-- `qwen2.5-0.5b-instruct-q4_k_m.gguf` (491 MB): excelente personalidad y compresión.
+- `qwen2.5-0.5b-instruct-q4_k_m.gguf` (491 MB): excelente personalidad y comprensión del español.
+- `qwen1_5-1_8b-chat-q4_k_m.gguf` (1.2 GB): más vocabulario, para equipos con más memoria.
+
+Cada modelo va con su **SHA-256 fijado** en `src/persona/gus.ts`, así que se sabe exactamente
+qué archivo corresponde a cada preset.
 
 Probado el 24 de septiembre de 2026 contra un endpoint local de prueba que habla el mismo protocolo:
 
