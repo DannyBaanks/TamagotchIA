@@ -20,14 +20,22 @@ El LLM nunca puede modificar directamente hambre, energía, edad, inventario, ev
 
 ## Arquitectura base
 
-- Backend local: Python.
-- API local: FastAPI.
-- Frontend: TypeScript + HTML/CSS ligero.
-- Persistencia: SQLite.
-- LLM: interfaz `PersonalityProvider` compatible con proveedores OpenAI-compatible.
-- Fallback: reacciones deterministas y `MockProvider`.
-- Tests: pytest.
-- Ejecución inicial: aplicación local en `localhost`, sin Electron.
+La del MVP es esta (el porqué del cambio está en [SPEC.md](SPEC.md), tabla "Antes / Ahora"):
+
+- **Motor determinista en TypeScript, dentro del dispositivo.** Es la única fuente de verdad.
+- **Frontend**: TypeScript + HTML/CSS ligero, empaquetado con Vite.
+- **Persistencia**: guardado versionado en `localStorage`, con checksum y respaldo automático; la clave del proveedor va en un almacén aparte y nunca se exporta.
+- **LLM**: interfaz `PersonalityProvider` compatible con proveedores OpenAI-compatible.
+- **Fallback**: reacciones deterministas locales; el juego funciona completo sin clave ni internet.
+- **Tests**: vitest.
+- **Ejecución**: PWA instalable (Android/iPhone) y también en el navegador; sin Electron y sin servidor.
+
+> **Descartado frente al plan inicial.** El primer borrador pedía backend Python + FastAPI,
+> SQLite y pytest. No se puede: *un servidor Python no vive en un teléfono*, y con la PC
+> apagada la criatura dejaría de existir. SQLite tampoco está disponible en una PWA sin
+> servidor, así que la persistencia es un guardado versionado con respaldo. Se conserva lo
+> que no cambia: el motor manda, el proveedor no puede mutar el estado, todo funciona sin
+> conexión y sin clave, y los indicadores van de `0..100`.
 
 ## Milestones
 
@@ -39,7 +47,7 @@ Definir fantasía principal de crianza, tono y personalidad visual, convención 
 
 ### 1. Esqueleto ejecutable
 
-Crear el repositorio independiente y una app arrancable con backend local, frontend visible, SQLite inicial, configuración por entorno, README y comandos de desarrollo y tests.
+Crear el repositorio independiente y una app arrancable con el motor dentro del dispositivo, frontend visible, guardado inicial, configuración por entorno, README y comandos de desarrollo y tests.
 
 Primera pantalla: crear criatura, elegir nombre y comenzar.
 
@@ -63,7 +71,7 @@ Usar reloj y semilla aleatoria inyectables.
 
 ### 4. Persistencia y continuidad temporal
 
-Conectar el motor a SQLite con guardado automático, carga al iniciar, `last_tick_at`, historial de eventos, catch-up al reabrir, migraciones básicas y recuperación segura de saves incompletos.
+Conectar el motor al guardado versionado con guardado automático, carga al iniciar, `last_tick_at`, historial de eventos, catch-up al reabrir, migraciones básicas y recuperación segura de saves incompletos.
 
 **Done cuando:** cerrar y reabrir la app conserva la criatura y aplica correctamente el tiempo transcurrido.
 
@@ -133,7 +141,7 @@ El LLM solo aporta comentarios ocasionales y cortos.
 
 Soportar presets para OpenAI, OpenRouter, NVIDIA, proveedores locales y endpoints custom.
 
-Requisitos: usar keyring de Linux cuando esté disponible, permitir variables de entorno como fallback avanzado, nunca guardar claves en SQLite, nunca imprimirlas en logs, nunca incluirlas en prompts, screenshots o saves, y funcionamiento completo sin clave.
+Requisitos: la clave queda solo en el dispositivo, en un almacén aparte del save, permitir variables de entorno como fallback avanzado, nunca guardarla en el save ni en el respaldo exportado, nunca imprimirla en logs, nunca incluirla en prompts, screenshots o saves, y funcionamiento completo sin clave. Además, presets offline con GUS (GGUF) para hablar sin internet ni clave.
 
 ### 12. Debug mode
 
@@ -149,7 +157,7 @@ El juego debe dominar visualmente. Talk nunca debe convertirse en un chat gigant
 
 ### 14. Robustez y seguridad
 
-Probar proveedor offline, timeout, rate limit, JSON inválido, proveedor desconocido, SQLite bloqueado, save corrupto, reloj adelantado o atrasado, cierre durante una acción y reinicio inesperado.
+Probar proveedor offline, timeout, rate limit, JSON inválido, proveedor desconocido, almacenamiento no disponible, save corrupto, reloj adelantado o atrasado, cierre durante una acción y reinicio inesperado.
 
 Garantías: el LLM nunca modifica la realidad, las acciones se procesan una sola vez, los eventos importantes son auditables, siempre existe fallback local y los secretos no aparecen en archivos de estado.
 

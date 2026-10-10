@@ -54,6 +54,13 @@ Con los cuidados pasa de **bebé** a **peque** y luego a **grande**. Si la descu
 
 Cada uno tiene su propio cuarto, y el cielo cambia con la hora real: amanecer, día, atardecer y noche con estrellas.
 
+## O adopta el tuyo
+
+Si ya tienes una mascota en mente, no hace falta que sea una de las nuestras: en la pantalla de adopción pulsa **📁 Adoptar con mi propio GIF o PNG** y elige una imagen de tu teléfono. Queda como tu criatura, con su nombre tomado del archivo.
+
+- Acepta **GIF animado**, PNG, WebP y JPEG.
+- La imagen se guarda como parte del aspecto, aparte de la partida.
+
 <p align="center">
   <img src="docs/img/minijuego.png" width="240" alt="El minijuego Atrapa la estrella">
   &nbsp;&nbsp;
@@ -77,6 +84,16 @@ La forma más fácil y **sin pagar nada** es OpenRouter, que tiene modelos grati
 4. Pulsa **Probar la voz**. Si ves **✓ Responde el modelo**, ya está.
 
 Los modelos gratis son los que terminan en **`:free`** y tienen un límite de uso diario. Si uno deja de funcionar, busca otro en [openrouter.ai/models](https://openrouter.ai/models) y escribe su nombre en **Modelo**.
+
+### O una voz 100% offline, sin internet ni clave (GUS)
+
+Si prefieres que la criatura improvise sin depender de ningún servicio, elige el preset **GUS Local (GGUF offline)** (`http://localhost:8080/v1`). Los modelos van con su **SHA-256 fijado** para que sepas exactamente qué estás descargando:
+
+| Modelo | Tamaño | Para qué |
+|---|---|---|
+| SmolLM2 360M Instruct | 270 MB | Ultra-ligero, ideal para el móvil; inferencia casi instantánea |
+| Qwen 2.5 0.5B Instruct | 491 MB | Buena personalidad y comprensión del español |
+| Qwen 1.5 1.8B Chat | 1.2 GB | Más vocabulario, para equipos con más memoria |
 
 > **¿Y la clave gratis de NVIDIA (`nvapi-…`)?** Por ahora no funciona en la app web: el servidor de NVIDIA no deja que una página le hable directo (lo medimos: el navegador bloquea la respuesta). Los mismos modelos de NVIDIA están gratis en OpenRouter. Cuando exista la versión de app nativa, la clave `nvapi-` va a funcionar directo.
 
@@ -140,7 +157,7 @@ Versión **0.1**, recién salida del huevo 🐣. Está probada en Chrome con tam
 ```bash
 npm install
 npm run dev      # http://localhost:5173
-npm test         # 55 tests: motor, voz, guardado y avisos
+npm test         # 79 tests: motor, voz, avatares, guardado, avisos y GUS
 npm run build    # la app completa en dist/
 ```
 
