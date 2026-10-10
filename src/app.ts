@@ -5,6 +5,8 @@
  */
 import { applyCommand, type Command, type CommandInput } from "./engine/commands";
 import { conditions, pose as basePose, type Pose } from "./engine/derived";
+import { dominantReasons, projectCareFingerprint } from "./engine/fingerprint";
+import { buildComparison, demoTraits, type DemoCreature } from "./ui/abDemo";
 import { acceptProposedMemory, relevantMemories } from "./engine/memory";
 import * as R from "./engine/rules";
 import { evolve, simulateElapsed } from "./engine/simulation";
@@ -563,6 +565,8 @@ export class App {
                    : this.option("🌙", "Dormir", "recupera energía", run({ kind: "sleep" })),
           this.option("🧭", "Explorar", "sale a buscar tesoritos", run({ kind: "explore" })),
           this.option("📔", "Diario", "recuerdos y lo que ha pasado", () => this.openDiary()),
+          this.option("🐾", "Así me has criado", "sus costumbres, con el motivo", () => this.openCared()),
+          this.option("🔬", "Dos crianzas, dos criaturas", "demo reproducible A/B", () => this.openABDemo()),
           this.option("🎨", "Su aspecto", "pixel art 8 bits, 16 bits o LCD", () => this.openLook()),
           this.option("⚙️", "Ajustes", "voz, respaldo y más", () => this.openSettings()));
         break;
@@ -614,6 +618,65 @@ export class App {
         : h("p", { class: "hint" }, "Todavía no hay recuerdos. Ya vendrán."),
       h("h3", {}, "Lo último que pasó"),
       h("ul", { class: "list compact" }, ...events.map(([e, d]) => h("li", {}, h("span", {}, d!), h("time", {}, clockLabel(e.at))))));
+  }
+
+  /**
+   * "Así me has criado": up to three traits, each with the real count behind it.
+   *
+   * Every sentence here comes from dominantReasons(), which only names an axis when
+   * real events back it. With too little history the card says so instead of inventing
+   * a personality, and it never shows ids, raw JSON or made-up percentages.
+   */
+  private openCared(): void {
+    const w = this.world;
+    if (!w) return;
+    const creature = w.creature;
+    const reasons = dominantReasons(projectCareFingerprint(w));
+    const totalEvents = w.events.length;
+
+    const rows = reasons.map((reason) =>
+      h("li", { class: "cared-row" },
+        h("span", { class: "cared-label" }, reason.label),
+        h("span", { class: "cared-why" }, reason.sentence)));
+
+    this.sheet(`Así me has criado a ${creature.name}`,
+      reasons.length
+        ? h("ul", { class: "list cared-list" }, ...rows)
+        : h("p", { class: "hint" }, "Todavía nos estamos conociendo. Cuídala un poco más y esto se irá llenando."),
+      h("p", { class: "hint" }, reasons.length
+        ? "Esto sale de lo que de verdad habéis hecho juntos, no de lo que diga su voz."
+        : "Aún no hay suficientes días de crianza para decir cómo es."));
+  }
+
+  /**
+   * The A/B scene: two creatures from the same seed, two different upbringings, and the
+   * traits each one ended up with. Clearly labelled as a simulation, and built on throwaway
+   * worlds, so the creature the player actually raised is never touched.
+   */
+  private openABDemo(): void {
+    const comparison = buildComparison();
+    const column = (creature: DemoCreature) => {
+      const traits = demoTraits(creature);
+      return h("div", { class: "ab-col" },
+        h("h3", {}, creature.title),
+        h("p", { class: "hint" }, creature.blurb),
+        traits.length
+          ? h("ul", { class: "list cared-list" }, ...traits.map((r) =>
+              h("li", { class: "cared-row" },
+                h("span", { class: "cared-label" }, r.label),
+                h("span", { class: "cared-why" }, r.sentence))))
+          : h("p", { class: "hint" }, "Sin rasgos marcados todavía."));
+    };
+
+    const voiceNote = h("p", { class: "hint" }, this.provider()
+      ? `Ahora mismo las dos tienen la misma voz (${this.settings.model}). Cambiarla no tocaría nada de lo de arriba.`
+      : "Ahora mismo las dos hablan con su voz local, sin IA. Cambiarla no tocaría nada de lo de arriba.");
+
+    this.sheet("Dos crianzas, dos criaturas",
+      h("p", { class: "hint" }, comparison.clockNote),
+      h("div", { class: "ab-grid" }, column(comparison.a), column(comparison.b)),
+      voiceNote,
+      h("p", { class: "hint" }, "Nacieron iguales: misma especie y misma semilla. Lo único distinto fue el cuidado."));
   }
 
   private openSettings(): void {

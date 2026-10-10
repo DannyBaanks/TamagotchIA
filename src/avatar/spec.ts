@@ -36,7 +36,7 @@ export const ERAS: Record<EraId, Era> = {
 export const ERA_IDS = Object.keys(ERAS) as EraId[];
 
 // ------------------------------------------------------------------ closed catalogs
-export const BODIES = ["redondo", "gota", "alto", "gato", "pajaro", "dino"] as const;
+export const BODIES = ["redondo", "gota", "alto", "gato", "pajaro", "dino", "cangrejo"] as const;
 export const EARS = ["ninguna", "gato", "conejo", "oso", "cuernos", "antena"] as const;
 export const EYES = ["puntos", "grandes", "dormilones", "visor"] as const;
 export const MOUTHS = ["sonrisa", "gato", "pico", "colmillos"] as const;
@@ -45,6 +45,8 @@ export const PATTERNS = ["ninguno", "manchas", "rayas", "pancita"] as const;
 export const ACCESSORIES = ["ninguno", "moño", "sombrero", "corona", "lentes", "bufanda"] as const;
 
 export const COLORS: Record<string, string> = {
+  // coral and cian are the crab's own palette (measured from the claw logo)
+  coral: "#ce3434", cian: "#00dec6",
   rojo: "#e8483f", naranja: "#f08a2c", amarillo: "#f5cf3a", lima: "#b4e33d", verde: "#4fb86a",
   celeste: "#5cc7e8", azul: "#3f6fd8", morado: "#8a5cd6", rosa: "#f28bb8", cafe: "#9a6a44",
   crema: "#f4e2c0", blanco: "#f4f4f0", gris: "#9aa0a8", negro: "#3a3a44",
