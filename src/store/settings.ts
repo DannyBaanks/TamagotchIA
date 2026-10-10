@@ -54,6 +54,15 @@ export const PRESETS: Preset[] = [
     nativeNote: "En la app sí funciona directo con tu clave gratis nvapi- de build.nvidia.com. El nombre del modelo sale en la página de cada modelo.",
   },
   { label: "OpenAI", baseUrl: "https://api.openai.com/v1", model: "gpt-4o-mini", note: "De pago, con tu clave de OpenAI." },
+  {
+    label: "GUS Local (GGUF offline)",
+    baseUrl: "http://localhost:8080/v1",
+    model: "smollm2-360m-instruct-q4_k_m.gguf",
+    note: "Voz 100% offline sin internet ni claves. Requiere llama-server o motor GUS local en puerto 8080.",
+    nativeLabel: "GUS Local (GGUF offline sin internet)",
+    nativeModel: "smollm2-360m-instruct-q4_k_m.gguf",
+    nativeNote: "Inferencia offline local en tu dispositivo con modelos ligeros como SmolLM2 360M o Qwen 2.5 0.5B.",
+  },
   { label: "Ollama (en este aparato)", baseUrl: "http://localhost:11434/v1", note: "Un modelo en este mismo aparato. En el celular, localhost es el celular." },
   { label: "LM Studio (en este aparato)", baseUrl: "http://localhost:1234/v1", note: "Un modelo en este mismo aparato." },
 ];

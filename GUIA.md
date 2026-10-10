@@ -86,6 +86,11 @@ Ajustes → **La voz**:
 4. Pega la API key. Se guarda solo en ese teléfono, separada de la partida; no entra en el respaldo exportado.
 5. Pulsa **Probar la voz**.
 
+**Modelos offline con GUS Local (sin internet ni clave):**
+Elige el preset **GUS Local (GGUF offline)** (`http://localhost:8080/v1`) para que la criatura hable en cualquier lugar sin conexión:
+- `smollm2-360m-instruct-q4_k_m.gguf` (270 MB): ultra-rápido, no consume batería.
+- `qwen2.5-0.5b-instruct-q4_k_m.gguf` (491 MB): excelente personalidad y compresión.
+
 Probado el 24 de septiembre de 2026 contra un endpoint local de prueba que habla el mismo protocolo:
 
 ```text

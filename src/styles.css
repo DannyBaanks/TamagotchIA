@@ -121,8 +121,19 @@ button:disabled { cursor: not-allowed; opacity: 0.38; }
 .meter[data-level="mid"] .bar i { background: var(--mid); }
 .meter[data-level="low"] .bar i { background: var(--warn); }
 .meter[data-level="low"] .ico { animation: nudge 1.4s ease-in-out infinite; }
+.meter[data-level="low"] .bar { animation: meter-pulse 1.2s ease-in-out infinite alternate; }
 
-/* ------------------------------------------------------------------ stage */
+/* ------------------------------------------------------------------ particles fx */
+.particles-layer {
+  position: absolute; inset: 0; pointer-events: none; z-index: 10; overflow: hidden;
+}
+.floating-fx {
+  position: absolute;
+  font-size: 1.8rem;
+  user-select: none;
+  pointer-events: none;
+  animation: float-particle 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
 .stage { position: relative; overflow: hidden; margin: 0 12px; border-radius: 28px; }
 
 .sky { position: absolute; inset: 0; transition: background 2s; }
@@ -394,6 +405,27 @@ select.field { appearance: none; }
 @keyframes fade { from { opacity: 0; } }
 @keyframes slide-up { from { transform: translateY(100%); } }
 @keyframes drop { from { opacity: 0; transform: translateY(-10px); } }
+@keyframes meter-pulse { from { box-shadow: 0 0 0px var(--warn); } to { box-shadow: 0 0 8px var(--warn); } }
+@keyframes float-particle {
+  0% { opacity: 1; transform: translate(-50%, 0) scale(0.6); }
+  40% { opacity: 1; transform: translate(calc(-50% + var(--dx, 0px)), -40px) scale(1.25); }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx, 0px) * 1.5), -90px) scale(0.9); }
+}
+
+/* ------------------------------------------------------------------ gus model picker */
+.model-pills { display: grid; grid-template-columns: 1fr; gap: 8px; margin-top: 4px; }
+.model-pill {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px 12px; border-radius: var(--radius-sm);
+  background: var(--surface); border: 1.5px solid var(--line); text-align: left;
+  transition: border-color 0.2s, background 0.2s;
+}
+.model-pill:active { transform: scale(0.98); }
+.model-pill.active { border-color: var(--accent); background: rgba(198, 255, 61, 0.12); }
+.model-pill-top { display: flex; align-items: center; justify-content: space-between; }
+.model-pill-name { font-weight: 700; font-size: 0.95rem; }
+.model-pill-badge { font-size: 0.72rem; font-weight: 600; padding: 2px 7px; border-radius: 99px; background: var(--ok); color: #1b1530; }
+.model-pill-desc { font-size: 0.8rem; color: var(--muted); line-height: 1.35; }
+.model-pill-meta { font-size: 0.75rem; color: var(--muted); opacity: 0.8; font-family: monospace; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }

@@ -23,6 +23,7 @@ import { App as NativeApp } from "@capacitor/app";
 import { askPermission, loadPrefs, loadState, savePrefs, saveState, show, support, type Support } from "./notify/deliver";
 import { $, buzz, formatAge, h } from "./ui/dom";
 import { ATTENTION, FOOD_LABEL, MEMORY_ICON, STAGE_LABEL, clockLabel, dayLabel, describeEvent } from "./ui/labels";
+import { GUS_MODELS, findGusModel } from "./persona/gus";
 import { playMiniGame } from "./ui/minigame";
 import { design, type Design, type DesignMode } from "./avatar/designer";
 import { rasterize, type AvatarImages } from "./avatar/raster";
@@ -212,6 +213,12 @@ export class App {
       if (e.kind === "FAVORITE_FOUND") this.toast(`¡Nueva comida favorita: ${FOOD_LABEL[e.payload.food as Food].name}!`);
       if (e.kind === "EVOLVED") this.celebrate();
     }
+    if (!result.rejected) {
+      if (command.kind === "pet") this.spawnParticles(["❤️", "💖", "✨"], 4);
+      else if (command.kind === "feed") this.spawnParticles(["🍙", "😋", "✨"], 3);
+      else if (command.kind === "clean") this.spawnParticles(["🫧", "✨", "🧼"], 4);
+      else if (command.kind === "play") this.spawnParticles(["🎾", "⭐", "🎉"], 4);
+    }
     const react = REACT_PRIORITY.map((k) => result.events.find((e) => e.kind === k)).find(Boolean) ?? result.events.at(-1);
     if (react) void this.narrateEvent(react, playerSaid);
     this.update();
@@ -282,6 +289,23 @@ export class App {
     const stage = this.root.querySelector(".stage");
     stage?.classList.add("hatching");
     setTimeout(() => stage?.classList.remove("hatching"), 1600);
+  }
+
+  private spawnParticles(emojis: string[], count = 5): void {
+    const stage = this.root.querySelector(".stage");
+    if (!stage) return;
+    let layer = stage.querySelector<HTMLElement>(".particles-layer");
+    if (!layer) {
+      layer = h("div", { class: "particles-layer", "aria-hidden": "true" });
+      stage.appendChild(layer);
+    }
+    for (let i = 0; i < count; i++) {
+      const emoji = emojis[Math.floor(Math.random() * emojis.length)]!;
+      const dx = (Math.random() - 0.5) * 120;
+      const el = h("span", { class: "floating-fx", style: `--dx: ${dx}px; left: ${45 + (Math.random() - 0.5) * 20}%; bottom: 25%;` }, emoji);
+      layer.appendChild(el);
+      setTimeout(() => el.remove(), 1250);
+    }
   }
 
   toast(text: string): void {
@@ -563,19 +587,55 @@ export class App {
     const key = h("input", { class: "field", type: "password", value: loadSecret(this.store), placeholder: "API key (opcional para modelos locales)", autocomplete: "off" }) as HTMLInputElement;
     const result = h("p", { class: "hint", "aria-live": "polite" });
     const presetNote = h("p", { class: "hint small", "aria-live": "polite" });
+    const isGus = () => {
+      const idx = Number(preset.value);
+      return PRESETS[idx]?.label?.includes("GUS") || url.value.includes(":8080");
+    };
+
+    const gusContainer = h("div", { class: "model-pills" + (isGus() ? "" : " hidden") });
+    const renderGusPills = () => {
+      gusContainer.replaceChildren(
+        h("p", { class: "label" }, "Modelos GGUF aprobados (100% offline):"),
+        ...GUS_MODELS.map((m) => {
+          const isSelected = model.value.trim() === m.filename;
+          return h("button", {
+            class: `model-pill ${isSelected ? "active" : ""}`,
+            type: "button",
+            onclick: () => {
+              model.value = m.filename;
+              renderGusPills();
+            },
+          },
+            h("div", { class: "model-pill-top" },
+              h("span", { class: "model-pill-name" }, m.name),
+              h("span", { class: "model-pill-badge" }, m.recommended ? "Recomendado ✓" : "Offline ✓")),
+            h("span", { class: "model-pill-desc" }, m.description),
+            h("span", { class: "model-pill-meta" }, `${(m.sizeBytes / 1024 / 1024).toFixed(0)} MB · ${m.license}`));
+        })
+      );
+    };
+    renderGusPills();
+
     preset.addEventListener("change", () => {
       const chosen = PRESETS[Number(preset.value)];
       if (!chosen) return;
       url.value = chosen.baseUrl;
       const suggested = (isNative() && chosen.nativeModel) || chosen.model;
-      if (suggested && !model.value.trim()) model.value = suggested;
+      if (suggested && (!model.value.trim() || isGus())) model.value = suggested;
       presetNote.textContent = (isNative() && chosen.nativeNote) || chosen.note;
+      const gusActive = isGus();
+      gusContainer.classList.toggle("hidden", !gusActive);
+      if (gusActive) renderGusPills();
     });
     // the most common mix-up: a free NVIDIA key pasted for OpenRouter, or the other way round
     const keyNote = h("p", { class: "hint small", "aria-live": "polite" });
     const checkKey = () => {
       const k = key.value.trim();
       const u = url.value;
+      if (isGus()) {
+        keyNote.textContent = "✓ No se necesita API key para modelos GUS locales (offline).";
+        return;
+      }
       keyNote.textContent =
         k.startsWith("nvapi-") && !u.includes("nvidia.com") ? (isNative()
           ? "Esa es una clave de NVIDIA (nvapi-): elige «NVIDIA directo» como proveedor."
@@ -583,8 +643,9 @@ export class App {
         k.startsWith("sk-or-") && !u.includes("openrouter.ai") ? "Esa es una clave de OpenRouter (sk-or-); cambia el proveedor a OpenRouter." : "";
     };
     key.addEventListener("input", checkKey);
-    url.addEventListener("input", checkKey);
+    url.addEventListener("input", () => { checkKey(); gusContainer.classList.toggle("hidden", !isGus()); });
     preset.addEventListener("change", checkKey);
+    checkKey();
 
     const commit = () => {
       this.settings = { enabled: enabled.checked, baseUrl: url.value.trim(), model: model.value.trim(), timeoutMs: s.timeoutMs };
@@ -629,6 +690,7 @@ export class App {
       h("label", { class: "switch" }, enabled, h("span", {}, "Usar un modelo como su voz")),
       h("label", { class: "field-label" }, "Proveedor", preset),
       presetNote,
+      gusContainer,
       h("label", { class: "field-label" }, "URL base (compatible con OpenAI)", url),
       h("label", { class: "field-label" }, "Modelo", model),
       h("label", { class: "field-label" }, "API key", key),
