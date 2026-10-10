@@ -100,3 +100,41 @@ export interface World {
   /** Recent command ids, so a double tap or a retried request applies once. */
   processedCommands: string[];
 }
+
+// ---------------------------------------------------------------- care fingerprint
+/**
+ * "Huella de crianza": a read-only projection of the events above. It is derived,
+ * rebuildable and versioned, so it never becomes a second source of truth.
+ * See engine/fingerprint.ts.
+ */
+export type Axis = "affection" | "curiosity" | "playfulness" | "calm";
+
+export interface FingerprintEvidence {
+  /** seq of the canonical event that justifies this point. */
+  eventId: number;
+  axis: Axis;
+  kind: EventKind;
+  effect: string;
+  occurredAt: number;
+}
+
+export interface CareFingerprint {
+  schema: "care-fingerprint/1";
+  rulesVersion: string;
+  creatureId: string;
+  derivedFromThroughEventId: number | null;
+  /** 0..100 per axis, saturated so repeating one action adds less and less. */
+  axes: Record<Axis, number>;
+  evidence: FingerprintEvidence[];
+  /** How many real events backed each axis (what the UI is allowed to claim). */
+  counts: Record<Axis, number>;
+}
+
+/** A trait the creature can show, phrased from real evidence only. */
+export interface FingerprintReason {
+  axis: Axis;
+  label: string;
+  score: number;
+  events: number;
+  sentence: string;
+}
