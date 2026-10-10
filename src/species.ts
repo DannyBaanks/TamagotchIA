@@ -36,7 +36,22 @@ export const SPECIES: Species[] = [
   },
 ];
 
-export function speciesById(id: string): Species {
+export function createCustomSpecies(pack: { id: string; name: string; dataUrl: string; isGif: boolean; habitat?: "neon" | "warm" }): Species {
+  return {
+    id: pack.id,
+    label: pack.name,
+    blurb: "Mascota personalizada con imagen/GIF importado.",
+    sprite: () => pack.dataUrl,
+    animated: pack.isGif,
+    habitat: pack.habitat ?? "neon",
+    accent: pack.habitat === "warm" ? "#ff8a5c" : "#c6ff3d",
+  };
+}
+
+export function speciesById(id: string, customPack?: { id: string; name: string; dataUrl: string; isGif: boolean; habitat?: "neon" | "warm" } | null): Species {
+  if (customPack && (id === customPack.id || id === "custom-creature")) {
+    return createCustomSpecies(customPack);
+  }
   return SPECIES.find((s) => s.id === id) ?? SPECIES[0]!;
 }
 

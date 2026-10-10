@@ -29,7 +29,7 @@ import { design, type Design, type DesignMode } from "./avatar/designer";
 import { rasterize, type AvatarImages } from "./avatar/raster";
 import { compile, fingerprint } from "./avatar/render";
 import { ERAS, ERA_IDS, POSES, type EraId } from "./avatar/spec";
-import { loadAvatar, saveAvatar, type SavedAvatar } from "./avatar/store";
+import { loadAvatar, saveAvatar, type SavedAvatar, loadCustomPack, saveCustomPack, type CustomSpritePack } from "./avatar/store";
 
 const DEBUG_KEY = "tamagotchia.debug.v1";
 const POSE_LABEL: Record<Pose, string> = { idle: "normal", thinking: "pensando", working: "jugando", success: "feliz", error: "triste", waiting: "dormido" };
@@ -61,9 +61,9 @@ export class App {
   private notifyPrefs: NotifyPrefs;
   private preloadedSpecies: string | null = null;
   private notifyState: NotifyState;
-  /** A look designed with the avatar compiler; null = the species' GIF. */
   private avatar: SavedAvatar | null;
   private avatarImages: AvatarImages | null = null;
+  private customPack: CustomSpritePack | null;
 
   constructor(private readonly root: HTMLElement) {
     const { store, persistent } = browserStore();
@@ -74,6 +74,13 @@ export class App {
     this.notifyPrefs = loadPrefs(store);
     this.notifyState = loadState(store);
     this.avatar = loadAvatar(store);
+    this.customPack = loadCustomPack(store);
+  }
+
+  private setCustomPack(pack: CustomSpritePack | null): void {
+    this.customPack = pack;
+    saveCustomPack(this.store, pack);
+    this.update();
   }
 
   private setAvatar(avatar: SavedAvatar | null): void {
@@ -338,6 +345,36 @@ export class App {
       this.renderGame();
       this.speech = { text: "…tac, tac…", until: Date.now() + 4000 };
     } }, "Adoptar este huevo");
+    const customEggInput = h("input", { type: "file", accept: "image/gif,image/png,image/webp,image/jpeg", class: "hidden" }) as HTMLInputElement;
+    customEggInput.addEventListener("change", () => {
+      const file = customEggInput.files?.[0];
+      if (!file) return;
+      const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+      const reader = new FileReader();
+      reader.onload = () => {
+        const dataUrl = reader.result as string;
+        const packId = `custom-${Date.now()}`;
+        this.setCustomPack({
+          id: packId,
+          name: file.name.replace(/\.[^/.]+$/, ""),
+          dataUrl,
+          isGif,
+          habitat: "neon",
+          savedAt: this.now(),
+        });
+        const seed = globalThis.crypto?.getRandomValues?.(new Uint32Array(1))[0] ?? Date.now();
+        this.world = createWorld(name.value || file.name.replace(/\.[^/.]+$/, "") || "Huevito", packId, this.now(), seed);
+        this.seqSeen = this.world.seq;
+        this.persist();
+        this.renderGame();
+        this.toast(`¡Adoptaste a tu mascota con ${isGif ? "GIF" : "imagen"} personalizada! ✨`);
+        this.speech = { text: "…tac, tac… ¡Ya llegué!", until: Date.now() + 4000 };
+      };
+      reader.readAsDataURL(file);
+    });
+
+    const adoptCustom = h("button", { class: "btn big", type: "button", onclick: () => customEggInput.click() }, "📁 Adoptar con mi propio GIF o PNG");
+
     this.root.replaceChildren(
       h("div", { class: "onboarding" },
         h("header", {}, h("p", { class: "kicker" }, "TamagotchIA"), h("h1", {}, "Un huevo te encontró"),
@@ -346,6 +383,8 @@ export class App {
         h("label", { class: "label", for: "name" }, "¿Cómo se va a llamar?"),
         name,
         adopt,
+        adoptCustom,
+        customEggInput,
         h("div", { class: "toasts", "aria-live": "polite" })),
     );
   }
@@ -394,8 +433,8 @@ export class App {
     const game = this.root.querySelector<HTMLElement>(".game");
     if (!w || !game) return;
     const c = w.creature;
-    const species = speciesById(c.species);
-    this.preloadSprites(c.species);
+    const species = speciesById(c.species, this.customPack);
+    if (!this.customPack) this.preloadSprites(c.species);
     const now = Date.now();
     if (this.transient && this.transient.until < now) this.transient = null;
     if (this.speech && this.speech.until < now) this.speech = null;
@@ -787,20 +826,50 @@ export class App {
       status.textContent = `Ahora: ${ERAS[this.avatar.spec.era].label}, por ${this.avatar.author || "ti"}.`;
     }
 
-    this.sheet("Su aspecto",
-      h("p", { class: "hint" }, "El GIF es solo el de fábrica. Descríbelo y el motor lo dibuja en pixel art; si tienes un modelo, él lo diseña y el motor revisa que se pueda dibujar."),
-      h("div", { class: "era-grid" }, ...eraButtons),
-      h("label", { class: "field-label" }, "¿Cómo es?", text),
-      h("label", { class: "field-label" }, "Cómo lo hace el modelo", mode),
-      h("div", { class: "row wrap" },
-        h("button", { class: "btn", type: "button", onclick: () => void run(false) }, "Dibujar con mis palabras"),
-        h("button", { class: "btn primary", type: "button", disabled: !hasModel, onclick: () => void run(true) }, "Que el modelo lo diseñe")),
-      hasModel ? "" : h("p", { class: "hint small" }, "Para que lo diseñe un modelo, primero configura «La voz» en Ajustes (sirve el mismo)."),
-      preview, status, log,
-      h("div", { class: "row wrap" }, apply,
-        this.avatar ? h("button", { class: "btn", type: "button", onclick: () => { this.setAvatar(null); this.closeSheet(); this.toast("Volvió el GIF de fábrica."); } }, "Volver al GIF") : null));
-    show();
-  }
+      const customFileInput = h("input", { type: "file", accept: "image/gif,image/png,image/webp,image/jpeg", class: "hidden" }) as HTMLInputElement;
+      customFileInput.addEventListener("change", () => {
+        const file = customFileInput.files?.[0];
+        if (!file) return;
+        const isGif = file.type === "image/gif" || file.name.toLowerCase().endsWith(".gif");
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result as string;
+          this.setAvatar(null); // Clear pixel avatar so custom pack takes over
+          this.setCustomPack({
+            id: `custom-${Date.now()}`,
+            name: file.name.replace(/\.[^/.]+$/, ""),
+            dataUrl,
+            isGif,
+            habitat: c.species === "tabby-shinji-cat" ? "warm" : "neon",
+            savedAt: this.now(),
+          });
+          this.closeSheet();
+          this.toast(`¡${c.name} ahora usa tu ${isGif ? "GIF" : "imagen"} personalizada! ✨`);
+        };
+        reader.readAsDataURL(file);
+      });
+
+      this.sheet("Su aspecto",
+        h("p", { class: "hint" }, "El GIF es solo el de fábrica. Descríbelo y el motor lo dibuja en pixel art; si tienes un modelo, él lo diseña y el motor revisa que se pueda dibujar."),
+        h("div", { class: "era-grid" }, ...eraButtons),
+        h("label", { class: "field-label" }, "¿Cómo es?", text),
+        h("label", { class: "field-label" }, "Cómo lo hace el modelo", mode),
+        h("div", { class: "row wrap" },
+          h("button", { class: "btn", type: "button", onclick: () => void run(false) }, "Dibujar con mis palabras"),
+          h("button", { class: "btn primary", type: "button", disabled: !hasModel, onclick: () => void run(true) }, "Que el modelo lo diseñe")),
+        hasModel ? "" : h("p", { class: "hint small" }, "Para que lo diseñe un modelo, primero configura «La voz» en Ajustes (sirve el mismo)."),
+        preview, status, log,
+        h("div", { class: "row wrap" }, apply,
+          this.avatar ? h("button", { class: "btn", type: "button", onclick: () => { this.setAvatar(null); this.closeSheet(); this.toast("Volvió el GIF de fábrica."); } }, "Volver al GIF") : null),
+        h("h3", {}, "Importar cualquier GIF o imagen"),
+        h("p", { class: "hint" }, "Sube cualquier GIF animado o imagen PNG/WebP desde tu dispositivo para usarlo como su cuerpo."),
+        h("div", { class: "row wrap" },
+          h("button", { class: "btn primary", type: "button", onclick: () => customFileInput.click() }, "📁 Subir mi GIF o PNG"),
+          this.customPack ? h("button", { class: "btn danger", type: "button", onclick: () => { this.setCustomPack(null); this.closeSheet(); this.toast("Eliminada la imagen personalizada; vuelve el de fábrica."); } }, "Quitar imagen importada") : "",
+          customFileInput),
+        this.customPack ? h("p", { class: "hint small" }, `Activo: ${this.customPack.name} (${this.customPack.isGif ? "GIF animado" : "Imagen estática con respiración"})`) : "");
+      show();
+    }
 
   private alertSettings(): Node[] {
     const status = h("p", { class: "hint", "aria-live": "polite" });

@@ -33,3 +33,36 @@ export function saveAvatar(store: KeyValueStore, avatar: SavedAvatar | null): vo
   if (avatar) store.setItem(AVATAR_KEY, JSON.stringify(avatar));
   else store.removeItem(AVATAR_KEY);
 }
+
+export const CUSTOM_PACK_KEY = "tamagotchia.custom_pack.v1";
+
+export interface CustomSpritePack {
+  readonly id: string;
+  readonly name: string;
+  readonly dataUrl: string; // GIF, PNG, or WebP base64 data URL
+  readonly isGif: boolean;
+  readonly habitat?: "neon" | "warm";
+  readonly savedAt: number;
+}
+
+export function loadCustomPack(store: KeyValueStore): CustomSpritePack | null {
+  try {
+    const raw = JSON.parse(store.getItem(CUSTOM_PACK_KEY) ?? "null") as Partial<CustomSpritePack> | null;
+    if (!raw || typeof raw.dataUrl !== "string" || !raw.dataUrl.startsWith("data:image/")) return null;
+    return {
+      id: String(raw.id ?? "custom-creature"),
+      name: String(raw.name ?? "Mi Criatura"),
+      dataUrl: raw.dataUrl,
+      isGif: raw.isGif === true || raw.dataUrl.startsWith("data:image/gif"),
+      habitat: raw.habitat === "warm" ? "warm" : "neon",
+      savedAt: Number(raw.savedAt ?? Date.now()),
+    };
+  } catch {
+    return null;
+  }
+}
+
+export function saveCustomPack(store: KeyValueStore, pack: CustomSpritePack | null): void {
+  if (pack) store.setItem(CUSTOM_PACK_KEY, JSON.stringify(pack));
+  else store.removeItem(CUSTOM_PACK_KEY);
+}
